@@ -1,0 +1,23 @@
+---
+import Layout from '../layouts/Layout.astro';
+import SiteHeader from '../components/SiteHeader.astro';
+import Hero from '../components/Hero.astro';
+import ProblemStatement from '../components/ProblemStatement.astro';
+import ProductApi from '../components/ProductApi.astro';
+import ProductWordPress from '../components/ProductWordPress.astro';
+import HowItsBuilt from '../components/HowItsBuilt.astro';
+import SiteFooter from '../components/SiteFooter.astro';
+---
+
+<Layout
+  title="CivicDog — Civic data. Built for impact."
+  description="CivicDog syncs authoritative U.S. Congress data from Congress.gov and ships it as a REST API and a WordPress plugin. See the product and the engineering behind it."
+>
+  <SiteHeader />
+  <Hero />
+  <ProblemStatement />
+  <ProductApi />
+  <ProductWordPress />
+  <HowItsBuilt />
+  <SiteFooter />
+</Layout>

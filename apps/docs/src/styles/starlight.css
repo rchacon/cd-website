@@ -1,0 +1,29 @@
+/* Re-theme Starlight's default palette to match the CivicDog brand (navy/blue, sampled from the logo). */
+:root {
+  --sl-color-accent-low: #123159;
+  --sl-color-accent: #3e79b4;
+  --sl-color-accent-high: #9cc2e8;
+  --sl-color-white: #ffffff;
+  --sl-color-gray-1: #eaf1fb;
+  --sl-color-gray-2: #c4d3e8;
+  --sl-color-gray-3: #8ba0bd;
+  --sl-color-gray-4: #566e8e;
+  --sl-color-gray-5: #33455f;
+  --sl-color-gray-6: #1c2d44;
+  --sl-color-black: #05132a;
+}
+
+:root[data-theme='light'] {
+  --sl-color-accent-low: #cfe0f2;
+  --sl-color-accent: #1f5488;
+  --sl-color-accent-high: #123159;
+  --sl-color-white: #05132a;
+  --sl-color-gray-1: #1c2d44;
+  --sl-color-gray-2: #33455f;
+  --sl-color-gray-3: #566e8e;
+  --sl-color-gray-4: #8ba0bd;
+  --sl-color-gray-5: #c4d3e8;
+  --sl-color-gray-6: #eef3fa;
+  --sl-color-gray-7: #f7fafc;
+  --sl-color-black: #ffffff;
+}
