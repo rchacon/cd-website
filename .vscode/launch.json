@@ -1,0 +1,19 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "command": "npm run dev",
+      "name": "Site dev server (civicdog.com)",
+      "request": "launch",
+      "type": "node-terminal",
+      "cwd": "${workspaceFolder}/apps/site"
+    },
+    {
+      "command": "npm run dev",
+      "name": "Docs dev server (docs.civicdog.com)",
+      "request": "launch",
+      "type": "node-terminal",
+      "cwd": "${workspaceFolder}/apps/docs"
+    }
+  ]
+}

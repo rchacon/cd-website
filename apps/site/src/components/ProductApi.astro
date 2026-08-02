@@ -1,0 +1,81 @@
+---
+const sample = `GET /members?state=GA&district=5
+
+{
+  "representatives": [
+    {
+      "first_name": "Nikema",
+      "last_name": "Williams",
+      "role": "Representative",
+      "party": "Democratic",
+      "phone": "(202) 225-3801",
+      "website": "https://williams.house.gov"
+    }
+  ],
+  "senators": [ ... ]
+}`;
+---
+
+<section id="product" class="border-b border-navy-900/10 py-20">
+  <div class="mx-auto grid max-w-6xl items-center gap-12 px-6 lg:grid-cols-2">
+    <div class="order-2 overflow-hidden rounded-2xl bg-navy-950 shadow-xl lg:order-1">
+      <div class="flex items-center gap-2 border-b border-white/10 px-4 py-3">
+        <span class="h-3 w-3 rounded-full bg-blue-300/40"></span>
+        <span class="h-3 w-3 rounded-full bg-blue-300/40"></span>
+        <span class="h-3 w-3 rounded-full bg-blue-300/40"></span>
+        <span class="ml-2 text-xs font-medium text-blue-200">cd-api</span>
+      </div>
+      <pre class="overflow-x-auto p-5 text-sm leading-relaxed text-blue-100"><code>{sample}</code></pre>
+    </div>
+
+    <div class="order-1 lg:order-2">
+      <p class="text-sm font-semibold uppercase tracking-widest text-blue-500">Product · API</p>
+      <h2 class="mt-3 text-3xl font-bold text-navy-900 sm:text-4xl">A clean REST API for congressional data</h2>
+      <p class="mt-4 text-lg text-navy-700">
+        <code class="rounded bg-navy-900/5 px-1.5 py-0.5 text-base">cd-api</code> serves current senators and
+        representatives by state and district, backed by a Postgres database that's kept fresh by an Airflow
+        pipeline syncing from the official Congress.gov API.
+      </p>
+      <ul class="mt-6 space-y-3 text-navy-800">
+        <li class="flex gap-3">
+          <span class="text-blue-500">&#9679;</span>
+          <span>Standardized <span class="font-semibold">RFC 9457</span> problem+json error responses</span>
+        </li>
+        <li class="flex gap-3">
+          <span class="text-blue-500">&#9679;</span>
+          Apportionment-validated districts — a real 404 vs. a genuine vacancy
+        </li>
+        <li class="flex gap-3">
+          <span class="text-blue-500">&#9679;</span>
+          Deployed serverless on AWS Lambda behind API Gateway
+        </li>
+      </ul>
+
+      <div id="api-key" class="mt-6 rounded-xl border border-navy-900/10 bg-blue-200/10 p-4">
+        <p class="text-sm font-semibold text-navy-900">Need access?</p>
+        <p class="mt-1 text-sm text-navy-700">
+          There's no self-serve signup yet — email{' '}
+          <a
+            href="mailto:support@civicdog.com?subject=CivicDog%20API%20Key%20Request"
+            class="font-medium text-blue-500 underline underline-offset-2 hover:text-blue-600"
+          >
+            support@civicdog.com
+          </a>{' '}
+          to request an API key.
+        </p>
+      </div>
+
+      <div class="mt-6 flex flex-wrap gap-x-6 gap-y-2">
+        <a href="https://docs.civicdog.com/api/" class="inline-block font-semibold text-blue-500 hover:text-blue-600">
+          Read the API docs &rarr;
+        </a>
+        <a
+          href="mailto:support@civicdog.com?subject=CivicDog%20API%20Key%20Request"
+          class="inline-block font-semibold text-navy-700 hover:text-blue-600"
+        >
+          Request API access &rarr;
+        </a>
+      </div>
+    </div>
+  </div>
+</section>

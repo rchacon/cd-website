@@ -1,0 +1,40 @@
+---
+interface Props {
+  code: string;
+}
+
+const { code } = Astro.props;
+---
+
+<div class="not-content mermaid-card">
+  <pre class="mermaid">{code}</pre>
+</div>
+
+<style>
+  .mermaid-card {
+    background: #ffffff;
+    border: 1px solid #d8e2f0;
+    border-radius: 1rem;
+    padding: 1.5rem;
+    overflow-x: auto;
+    margin-block: 1.5rem;
+  }
+</style>
+
+<script>
+  import mermaid from 'mermaid';
+
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'base',
+    themeVariables: {
+      primaryColor: '#eef3fa',
+      primaryTextColor: '#0a2246',
+      primaryBorderColor: '#27619c',
+      lineColor: '#27619c',
+      secondaryColor: '#cfe0f2',
+      tertiaryColor: '#ffffff',
+      fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif'
+    }
+  });
+</script>

@@ -1,0 +1,42 @@
+---
+const repos = [
+  { name: 'cd-platform', href: 'https://github.com/rchacon/cd-platform', desc: 'Airflow ETL + FastAPI' },
+  { name: 'cd-lookup', href: 'https://github.com/rchacon/cd-lookup', desc: 'WordPress plugin' },
+  { name: 'cd-infra', href: 'https://github.com/rchacon/cd-infra', desc: 'Terraform AWS infra' },
+  { name: 'cd-website', href: 'https://github.com/rchacon/cd-website', desc: 'This site' }
+];
+---
+
+<footer class="bg-navy-950 py-14 text-blue-100">
+  <div class="mx-auto max-w-6xl px-6">
+    <div class="flex flex-col justify-between gap-10 sm:flex-row">
+      <div class="max-w-sm">
+        <div class="flex items-center gap-2">
+          <img src="/logo/civicdog-mark.webp" alt="" width="28" height="28" class="h-7 w-7" />
+          <span class="font-bold text-white">CivicDog</span>
+        </div>
+        <p class="mt-3 text-sm text-blue-200">
+          Civic data. Built for impact. Designed and built by Raul Chacon.
+        </p>
+        <a href="mailto:support@civicdog.com" class="mt-3 inline-block text-sm text-blue-300 hover:text-white">
+          support@civicdog.com
+        </a>
+      </div>
+
+      <div class="grid grid-cols-2 gap-x-8 gap-y-4 sm:grid-cols-4">
+        {
+          repos.map((repo) => (
+            <a href={repo.href} target="_blank" rel="noopener noreferrer" class="group">
+              <p class="text-sm font-semibold text-white group-hover:text-blue-300">{repo.name}</p>
+              <p class="text-xs text-blue-300">{repo.desc}</p>
+            </a>
+          ))
+        }
+      </div>
+    </div>
+
+    <div class="mt-10 border-t border-white/10 pt-6 text-xs text-blue-300">
+      &copy; {new Date().getFullYear()} CivicDog. All rights reserved.
+    </div>
+  </div>
+</footer>

@@ -1,0 +1,49 @@
+---
+title: Engineering Overview
+description: How CivicDog is built — the data pipeline, API, AWS infrastructure, and automation behind the product.
+---
+
+import MermaidDiagram from '../../components/MermaidDiagram.astro';
+
+CivicDog is a small, production civic-tech product suite: an ETL pipeline that syncs U.S. Congress
+member data from the official government API, a REST API that serves it, and a WordPress plugin
+that puts it in front of real site visitors. This section is a deep, honest walkthrough of how it's
+built — the architecture, the trade-offs, and the automation — for anyone who wants to see the
+engineering behind the product.
+
+## System overview
+
+<MermaidDiagram code={`graph LR
+  A[Congress.gov API] -->|sync| B["cd-etl\\nAirflow DAG"]
+  B --> C[("PostgreSQL\\ncurrent_members view")]
+  C --> D["cd-api\\nFastAPI on Lambda"]
+  D -->|x-api-key| E["cd-lookup\\nWordPress plugin"]
+  E --> F[Site visitor]
+
+  style A fill:#eef3fa,stroke:#27619c
+  style B fill:#eef3fa,stroke:#27619c
+  style C fill:#cfe0f2,stroke:#0a2246
+  style D fill:#eef3fa,stroke:#27619c
+  style E fill:#eef3fa,stroke:#27619c
+  style F fill:#ffffff,stroke:#8ba0bd
+`} />
+
+## The repos
+
+CivicDog is split across four repositories, each with a single responsibility:
+
+| Repo | What it is |
+|---|---|
+| [`cd-platform`](https://github.com/rchacon/cd-platform) | Python monorepo: `cd-etl` (Airflow ETL) + `cd-api` (FastAPI, deployed on Lambda) |
+| [`cd-lookup`](https://github.com/rchacon/cd-lookup) | The WordPress plugin that consumes `cd-api` |
+| [`cd-infra`](https://github.com/rchacon/cd-infra) | Terraform for every AWS resource this stack runs on |
+| [`cd-website`](https://github.com/rchacon/cd-website) | The [civicdog.com](https://civicdog.com) landing page and this docs site |
+
+## Where to go next
+
+- **[Architecture](/architecture/)** — the repo map, the single-source-of-truth data model, and the local/prod parity philosophy.
+- **[Data Pipeline](/data-pipeline/)** — the Airflow DAG that keeps member data in sync.
+- **[API](/api/)** — `cd-api`'s design: endpoints, error handling, and Lambda deployment.
+- **[Infrastructure](/infrastructure/)** — the Terraform-managed AWS stack, security posture, and cost trade-offs.
+- **[CI/CD & Automation](/cicd/)** — keyless deploys, container automation, and IaC scanning.
+- **[WordPress Plugin](/wordpress-plugin/)** — how `cd-lookup` caches, sanitizes, and tests itself.
