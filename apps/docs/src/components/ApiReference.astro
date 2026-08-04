@@ -13,5 +13,21 @@ const { specUrl } = Astro.props;
   import { createApiReference } from '@scalar/api-reference';
 
   const el = document.getElementById('api-reference')!;
-  createApiReference('#api-reference', { url: el.dataset.specUrl! });
+  createApiReference('#api-reference', {
+    url: el.dataset.specUrl!,
+    // agent.disabled: true unconditionally hides Scalar's "Ask AI" button --
+    // otherwise it always shows on localhost regardless of this config (an
+    // unconditional dev-mode override in Scalar's own agentEnabled logic),
+    // which made it look enabled in prod when it wasn't.
+    agent: { disabled: true },
+    // 'never': otherwise defaults to showing on localhost -- this is the
+    // toolbar with the "Developer Tools" toggle, Configure, Share, and
+    // Deploy buttons (all one component, DeveloperTools.vue, gated by this
+    // single flag).
+    showDeveloperTools: 'never',
+    hideDarkModeToggle: true,
+    // Same localhost-always-on default as agent/showDeveloperTools above --
+    // this is the "Generate MCP" / "Connect" button (OpenMCPButton.vue).
+    mcp: { disabled: true },
+  });
 </script>
