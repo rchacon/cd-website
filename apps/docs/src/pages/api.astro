@@ -4,13 +4,19 @@ import ApiReference from '../components/ApiReference.astro';
 
 const SPEC_URL = 'https://cd-platform-openapi-spec-658430303091.s3.us-west-2.amazonaws.com/openapi.json';
 
+// Single source of truth for each section's slug/text, shared between the
+// headings array below (drives the right-hand TOC) and the literal <h2>
+// tags in the markup -- editing one can't silently drift from the other.
+const SCHEMA_HEADING = { slug: 'schema', text: 'Schema' };
+const DEPLOYMENT_HEADING = { slug: 'deployment', text: 'Deployment' };
+
 // No 'overview' entry here -- Starlight's TableOfContents component already
 // injects its own top-of-page "Overview" link (tableOfContents.overview,
 // pointing at #_top) ahead of whatever's listed here, so including our own
 // "Overview" heading too made it appear twice in the right-hand nav.
 const headings = [
-  { depth: 2, slug: 'schema', text: 'Schema' },
-  { depth: 2, slug: 'deployment', text: 'Deployment' }
+  { depth: 2, ...SCHEMA_HEADING },
+  { depth: 2, ...DEPLOYMENT_HEADING },
 ];
 ---
 
@@ -33,11 +39,11 @@ const headings = [
     <li><strong>Errors:</strong> <code>application/problem+json</code> per <a href="https://www.rfc-editor.org/rfc/rfc9457">RFC 9457</a>, never a bespoke <code>{'{ "error": "..." }'}</code> shape</li>
   </ul>
 
-  <h2 id="schema">Schema</h2>
+  <h2 id={SCHEMA_HEADING.slug}>{SCHEMA_HEADING.text}</h2>
   <p>Generated directly from cd-api's OpenAPI spec, so it can't drift from what's actually deployed.</p>
   <ApiReference specUrl={SPEC_URL} />
 
-  <h2 id="deployment">Deployment</h2>
+  <h2 id={DEPLOYMENT_HEADING.slug}>{DEPLOYMENT_HEADING.text}</h2>
   <ul>
     <li>
       <strong>Lambda + RDS Proxy.</strong> Lambda's connection model (many short-lived invocations) doesn't
