@@ -31,6 +31,7 @@ export default defineConfig({
         { label: 'Architecture', link: '/architecture/' },
         { label: 'Data Pipeline', link: '/data-pipeline/' },
         { label: 'API', link: '/api/' },
+        { label: 'API Reference', link: '/api-reference/' },
         { label: 'Infrastructure', link: '/infrastructure/' },
         { label: 'CI/CD & Automation', link: '/cicd/' },
         { label: 'WordPress Plugin', link: '/wordpress-plugin/' }

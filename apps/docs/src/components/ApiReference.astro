@@ -1,0 +1,17 @@
+---
+interface Props {
+  specUrl: string;
+}
+
+const { specUrl } = Astro.props;
+---
+
+<div id="api-reference" data-spec-url={specUrl}></div>
+
+<script>
+  import '@scalar/api-reference/style.css';
+  import { createApiReference } from '@scalar/api-reference';
+
+  const el = document.getElementById('api-reference')!;
+  createApiReference('#api-reference', { url: el.dataset.specUrl! });
+</script>
