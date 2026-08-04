@@ -7,24 +7,8 @@ description: cd-api's design — endpoints, error handling, and serverless deplo
 to consume. It's wrapped with **Mangum** and deployed as an AWS Lambda function behind API Gateway — there's
 no long-running server to patch or scale.
 
-## Endpoints
-
-**`GET /members?state={state}&district={district}`**
-
-Returns senators for the given state, and — if `district` is provided — the House representative for
-that district too.
-
-```json
-{
-  "senators": [
-    { "first_name": "Jane", "last_name": "Example", "role": "Senator", "party": "Democratic", "phone": "…", "website": "…", "photo_url": "…" }
-  ],
-  "representatives": [ { "...": "..." } ]
-}
-```
-
-**`GET /version`** — returns the deployed version string, baked into the Lambda package at deploy time.
-Useful for confirming a deploy actually landed without digging through CloudWatch.
+For the endpoint list and schema reference, see [API Reference](/api-reference/) — generated
+directly from cd-api's OpenAPI schema, so it can't drift from what's actually deployed.
 
 ## Error handling: RFC 9457, not ad hoc JSON
 
@@ -54,3 +38,9 @@ Collapsing these into one generic "not found" would make the API lie about which
   `uv`, checks it against Lambda's 50MB limit, and calls `aws lambda update-function-code`.
 - **Keyless CI.** The deploy workflow assumes an IAM role via GitHub OIDC — no static AWS credentials
   stored in GitHub. More on this in [CI/CD & Automation](/cicd/).
+- **OpenAPI spec, exported on every deploy.** The same workflow calls FastAPI's `app.openapi()` to
+  generate `openapi.json` and pushes it to a small public S3 bucket, which is what powers the
+  [API Reference](/api-reference/) page — no separate step to remember, no risk of the published
+  schema falling behind a deploy. API Gateway requires an API key on every route (including a live
+  `/openapi.json`), so publishing a static export to S3 is what makes an unauthenticated reference
+  page possible at all.
