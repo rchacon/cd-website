@@ -4,46 +4,31 @@ import ApiReference from '../components/ApiReference.astro';
 
 const SPEC_URL = 'https://cd-platform-openapi-spec-658430303091.s3.us-west-2.amazonaws.com/openapi.json';
 
+// No 'overview' entry here -- Starlight's TableOfContents component already
+// injects its own top-of-page "Overview" link (tableOfContents.overview,
+// pointing at #_top) ahead of whatever's listed here, so including our own
+// "Overview" heading too made it appear twice in the right-hand nav.
 const headings = [
-  { depth: 2, slug: 'error-handling', text: 'Error handling' },
-  { depth: 2, slug: 'a-real-404-vs-a-genuine-vacancy', text: 'A real 404 vs. a genuine vacancy' },
-  { depth: 2, slug: 'deployment', text: 'Deployment' },
-  { depth: 2, slug: 'schema', text: 'Schema' }
+  { depth: 2, slug: 'schema', text: 'Schema' },
+  { depth: 2, slug: 'deployment', text: 'Deployment' }
 ];
 ---
 
 <StarlightPage frontmatter={{ title: 'API' }} hasSidebar={false} headings={headings}>
   <p>
-    <code>cd-api</code> is a small FastAPI service with one real job: serve <code>current_members</code> over
+    <code>cd-api</code> is a FastAPI service with one real job: serve <code>current_members</code> over
     HTTP for <code>cd-lookup</code> to consume. It's wrapped with <strong>Mangum</strong> and deployed as an
     AWS Lambda function behind API Gateway — there's no long-running server to patch or scale.
   </p>
-
-  <h2 id="error-handling">Error handling: RFC 9457, not ad hoc JSON</h2>
-  <p>
-    Errors are returned as <code>application/problem+json</code>, per <a href="https://www.rfc-editor.org/rfc/rfc9457">RFC 9457</a>
-    ("Problem Details for HTTP APIs"), instead of a bespoke <code>{'{ "error": "..." }'}</code> shape. That
-    means every error response is self-describing and machine-parseable in a standard way, not something a
-    client has to guess at from reading the source.
-  </p>
-
-  <h2 id="a-real-404-vs-a-genuine-vacancy">A real 404 vs. a genuine vacancy</h2>
-  <p>This is the detail that's easy to get wrong: not every "no representative found" is an error.</p>
   <ul>
-    <li><strong>Unknown state</strong> → <code>404</code>.</li>
-    <li>
-      <strong>District number that doesn't exist</strong> for that state → <code>404</code>, validated
-      against real U.S. House apportionment data (<code>apportionment.py</code>) — so a typo'd district
-      number fails clearly instead of silently returning nothing.
-    </li>
-    <li>
-      <strong>District that exists but is currently vacant</strong> → <code>200</code> with an empty list. A
-      vacancy is a true, valid state, not an error.
-    </li>
+    <li><strong>Base URL:</strong> <code>https://api.civicdog.com/v1</code></li>
+    <li><strong>Auth:</strong> <code>x-api-key</code> header, required on every route</li>
+    <li><strong>Errors:</strong> <code>application/problem+json</code> per <a href="https://www.rfc-editor.org/rfc/rfc9457">RFC 9457</a>, never a bespoke <code>{'{ "error": "..." }'}</code> shape</li>
   </ul>
-  <p>
-    Collapsing these into one generic "not found" would make the API lie about which case actually happened.
-  </p>
+
+  <h2 id="schema">Schema</h2>
+  <p>Generated directly from cd-api's OpenAPI spec, so it can't drift from what's actually deployed.</p>
+  <ApiReference specUrl={SPEC_URL} />
 
   <h2 id="deployment">Deployment</h2>
   <ul>
@@ -62,14 +47,10 @@ const headings = [
     </li>
     <li>
       <strong>OpenAPI spec, exported on every deploy.</strong> The same workflow calls FastAPI's <code>app.openapi()</code> to
-      generate <code>openapi.json</code> and pushes it to a small public S3 bucket, which is what powers this
+      generate <code>openapi.json</code> and pushes it to a public S3 bucket, which is what powers this
       page — no separate step to remember, no risk of the published schema falling behind a deploy. API
       Gateway requires an API key on every route (including a live <code>/openapi.json</code>), so publishing
       a static export to S3 is what makes an unauthenticated reference page possible at all.
     </li>
   </ul>
-
-  <h2 id="schema">Schema</h2>
-  <p>Generated directly from cd-api's OpenAPI spec, so it can't drift from what's actually deployed.</p>
-  <ApiReference specUrl={SPEC_URL} />
 </StarlightPage>
