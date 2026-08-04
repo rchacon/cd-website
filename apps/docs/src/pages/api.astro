@@ -14,7 +14,14 @@ const headings = [
 ];
 ---
 
-<StarlightPage frontmatter={{ title: 'API' }} hasSidebar={false} headings={headings}>
+<StarlightPage
+  frontmatter={{
+    title: 'API',
+    description: "cd-api's design: quick facts, a live OpenAPI reference, and its Lambda deployment.",
+  }}
+  hasSidebar={false}
+  headings={headings}
+>
   <p>
     <code>cd-api</code> is a FastAPI service with one real job: serve <code>current_members</code> over
     HTTP for <code>cd-lookup</code> to consume. It's wrapped with <strong>Mangum</strong> and deployed as an
