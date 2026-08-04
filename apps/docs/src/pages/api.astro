@@ -1,0 +1,69 @@
+---
+import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
+import ApiReference from '../components/ApiReference.astro';
+
+const SPEC_URL = 'https://cd-platform-openapi-spec-658430303091.s3.us-west-2.amazonaws.com/openapi.json';
+
+// Single source of truth for each section's slug/text, shared between the
+// headings array below (drives the right-hand TOC) and the literal <h2>
+// tags in the markup -- editing one can't silently drift from the other.
+const SCHEMA_HEADING = { slug: 'schema', text: 'Schema' };
+const DEPLOYMENT_HEADING = { slug: 'deployment', text: 'Deployment' };
+
+// No 'overview' entry here -- Starlight's TableOfContents component already
+// injects its own top-of-page "Overview" link (tableOfContents.overview,
+// pointing at #_top) ahead of whatever's listed here, so including our own
+// "Overview" heading too made it appear twice in the right-hand nav.
+const headings = [
+  { depth: 2, ...SCHEMA_HEADING },
+  { depth: 2, ...DEPLOYMENT_HEADING },
+];
+---
+
+<StarlightPage
+  frontmatter={{
+    title: 'API',
+    description: "cd-api's design: quick facts, a live OpenAPI reference, and its Lambda deployment.",
+  }}
+  hasSidebar={false}
+  headings={headings}
+>
+  <p>
+    <code>cd-api</code> is a FastAPI service with one real job: serve <code>current_members</code> over
+    HTTP for <code>cd-lookup</code> to consume. It's wrapped with <strong>Mangum</strong> and deployed as an
+    AWS Lambda function behind API Gateway — there's no long-running server to patch or scale.
+  </p>
+  <ul>
+    <li><strong>Base URL:</strong> <code>https://api.civicdog.com/v1</code></li>
+    <li><strong>Auth:</strong> <code>x-api-key</code> header, required on every route</li>
+    <li><strong>Errors:</strong> <code>application/problem+json</code> per <a href="https://www.rfc-editor.org/rfc/rfc9457">RFC 9457</a>, never a bespoke <code>{'{ "error": "..." }'}</code> shape</li>
+  </ul>
+
+  <h2 id={SCHEMA_HEADING.slug}>{SCHEMA_HEADING.text}</h2>
+  <p>Generated directly from cd-api's OpenAPI spec, so it can't drift from what's actually deployed.</p>
+  <ApiReference specUrl={SPEC_URL} />
+
+  <h2 id={DEPLOYMENT_HEADING.slug}>{DEPLOYMENT_HEADING.text}</h2>
+  <ul>
+    <li>
+      <strong>Lambda + RDS Proxy.</strong> Lambda's connection model (many short-lived invocations) doesn't
+      play well with Postgres's per-connection overhead, so <code>cd-api</code> connects through RDS Proxy
+      rather than directly to RDS.
+    </li>
+    <li>
+      <strong>Tag-triggered deploys.</strong> A <code>cd-api-v*</code> tag triggers <code>cd-api-deploy.yml</code>,
+      which builds a Lambda zip with <code>uv</code>, checks it against Lambda's 50MB limit, and calls <code>aws lambda update-function-code</code>.
+    </li>
+    <li>
+      <strong>Keyless CI.</strong> The deploy workflow assumes an IAM role via GitHub OIDC — no static AWS
+      credentials stored in GitHub. More on this in <a href="/cicd/">CI/CD & Automation</a>.
+    </li>
+    <li>
+      <strong>OpenAPI spec, exported on every deploy.</strong> The same workflow calls FastAPI's <code>app.openapi()</code> to
+      generate <code>openapi.json</code> and pushes it to a public S3 bucket, which is what powers this
+      page — no separate step to remember, no risk of the published schema falling behind a deploy. API
+      Gateway requires an API key on every route (including a live <code>/openapi.json</code>), so publishing
+      a static export to S3 is what makes an unauthenticated reference page possible at all.
+    </li>
+  </ul>
+</StarlightPage>

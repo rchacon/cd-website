@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@astrojs/starlight": "^0.41.6",
+    "@scalar/api-reference": "^1.64.0",
     "astro": "^7.1.6",
     "mermaid": "^11.16.0"
   },
