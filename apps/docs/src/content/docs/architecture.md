@@ -7,9 +7,12 @@ description: Repo layout, the single-source-of-truth data model, and the design 
 
 CivicDog is deliberately split into small, single-responsibility repos rather than one giant monorepo:
 
-- **`cd-platform`** — a Python monorepo containing two independently versioned, independently deployed
-  services: `cd-etl` (the Airflow ingestion pipeline) and `cd-api` (the FastAPI service). Each has its own
-  `pyproject.toml`, its own README, and its own release tag pattern (`cd-etl-v*`, `cd-api-v*`).
+- **`cd-platform`** — a Python monorepo containing three independently versioned, independently deployed
+  services: `cd-etl` (the Airflow ingestion pipeline), `cd-api` (the FastAPI service that serves
+  `cd-lookup`), and `cd-server` (the app backend for `cd-webapp`). Each has its own `pyproject.toml`, its
+  own README, and its own release tag pattern (`cd-etl-v*`, `cd-api-v*`, `cd-server-v*`).
+- **`cd-webapp`** — the React web app at `app.civicdog.com`, the core product experience. Its own
+  toolchain (npm, its own CI), entirely separate from the Python services it talks to.
 - **`cd-lookup`** — a WordPress plugin, PHP, entirely separate tooling (Composer, PHPUnit, WordPress
   Coding Standards) from the Python side.
 - **`cd-infra`** — Terraform only. No application code. Infra changes are reviewed and applied
@@ -52,7 +55,7 @@ dev or in prod.
 - **One source of truth per fact.** "What's the current Congress" lives in one SQL function, not
   scattered across services.
 - **Same artifact everywhere.** Docker images are built once and promoted, never rebuilt per-environment.
-- **Small, single-purpose repos.** Infra, ETL/API, and the WordPress consumer evolve and deploy
-  independently.
+- **Small, single-purpose repos.** Infra, ETL/API, the web app, and the WordPress consumer evolve and
+  deploy independently.
 - **Defensive by default.** Hash-guarded upserts, apportionment-validated districts, and RFC 9457 error
   bodies — see [Data Pipeline](/data-pipeline/) and [API](/api/) for specifics.
