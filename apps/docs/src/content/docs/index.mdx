@@ -17,8 +17,9 @@ the trade-offs, and the automation — for anyone who wants to see the engineeri
   A[Congress.gov API] -->|sync| B["cd-etl\\nAirflow DAG"]
   B --> C[("PostgreSQL\\ncurrent_members view")]
   C --> D["cd-api\\nFastAPI on Lambda"]
-  C --> H["cd-server\\napp backend"]
+  C -->|customer data| H["cd-server\\napp backend"]
   D -->|x-api-key| E["cd-lookup\\nWordPress plugin"]
+  D -->|Lambda invoke| H
   H --> G["cd-webapp\\nReact"]
   E --> F[Site visitor]
   G --> F
