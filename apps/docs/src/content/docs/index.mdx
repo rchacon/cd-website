@@ -6,10 +6,10 @@ description: How CivicDog is built — the data pipeline, API, AWS infrastructur
 import MermaidDiagram from '../../components/MermaidDiagram.astro';
 
 CivicDog is an evolving, production civic-tech product suite: an ETL pipeline that syncs U.S. Congress
-member data from the official government API, a REST API that serves it, and a WordPress plugin
-that puts it in front of real site visitors. This section is a deep, honest walkthrough of how it's
-built — the architecture, the trade-offs, and the automation — for anyone who wants to see the
-engineering behind the product.
+member data from the official government API, a REST API that serves it, an app backend and React web
+app that make up the core product experience, and a WordPress plugin that puts the data in front of
+real site visitors. This section is a deep, honest walkthrough of how it's built — the architecture,
+the trade-offs, and the automation — for anyone who wants to see the engineering behind the product.
 
 ## System overview
 
@@ -17,8 +17,11 @@ engineering behind the product.
   A[Congress.gov API] -->|sync| B["cd-etl\\nAirflow DAG"]
   B --> C[("PostgreSQL\\ncurrent_members view")]
   C --> D["cd-api\\nFastAPI on Lambda"]
+  C --> H["cd-server\\napp backend"]
   D -->|x-api-key| E["cd-lookup\\nWordPress plugin"]
+  H --> G["cd-webapp\\nReact"]
   E --> F[Site visitor]
+  G --> F
 
   style A fill:#eef3fa,stroke:#27619c
   style B fill:#eef3fa,stroke:#27619c
@@ -26,15 +29,18 @@ engineering behind the product.
   style D fill:#eef3fa,stroke:#27619c
   style E fill:#eef3fa,stroke:#27619c
   style F fill:#ffffff,stroke:#8ba0bd
+  style G fill:#eef3fa,stroke:#27619c
+  style H fill:#eef3fa,stroke:#27619c
 `} />
 
 ## The repos
 
-CivicDog is split across four repositories, each with a single responsibility:
+CivicDog is split across five repositories, each with a single responsibility:
 
 | Repo | What it is |
 |---|---|
-| [`cd-platform`](https://github.com/rchacon/cd-platform) | Python monorepo: `cd-etl` (Airflow ETL) + `cd-api` (FastAPI, deployed on Lambda) |
+| [`cd-webapp`](https://github.com/rchacon/cd-webapp) | The React web app at [app.civicdog.com](https://app.civicdog.com) — the core product |
+| [`cd-platform`](https://github.com/rchacon/cd-platform) | Python monorepo: `cd-etl` (Airflow ETL) + `cd-api` (FastAPI, deployed on Lambda) + `cd-server` (app backend for `cd-webapp`) |
 | [`cd-lookup`](https://github.com/rchacon/cd-lookup) | The WordPress plugin that consumes `cd-api` |
 | [`cd-infra`](https://github.com/rchacon/cd-infra) | Terraform for every AWS resource this stack runs on |
 | [`cd-website`](https://github.com/rchacon/cd-website) | The [civicdog.com](https://civicdog.com) landing page and this docs site |
