@@ -31,6 +31,12 @@ const { specUrl } = Astro.props;
       // single flag).
       showDeveloperTools: 'never',
       hideDarkModeToggle: true,
+      // Read-only reference: the API has no CORS headers, so live requests
+      // from the docs would just fail. hideTestRequestButton drops the
+      // per-operation "Test Request" panel; hideClientButton drops the
+      // toolbar "Open API Client" button (full-spec request sender).
+      hideTestRequestButton: true,
+      hideClientButton: true,
       // Same localhost-always-on default as agent/showDeveloperTools above --
       // this is the "Generate MCP" / "Connect" button (OpenMCPButton.vue).
       mcp: { disabled: true },
