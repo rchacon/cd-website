@@ -1,18 +1,26 @@
 ---
-const sample = `GET /members?state=GA&district=5
+const sample = `GET /members?filter[state]=GA&filter[district]=5
 
 {
-  "representatives": [
+  "data": [
     {
-      "first_name": "Nikema",
-      "last_name": "Williams",
-      "role": "Representative",
-      "party": "Democratic",
-      "phone": "(202) 225-3801",
-      "website": "https://williams.house.gov"
+      "type": "members",
+      "id": "W000827",
+      "attributes": {
+        "first_name": "Nikema",
+        "last_name": "Williams",
+        "chamber": "house",
+        "role": "Representative",
+        "party": "Democratic",
+        "phone": "(202) 225-3801",
+        "website": "https://williams.house.gov"
+      },
+      "links": {
+        "self": "https://api.civicdog.com/members/W000827"
+      }
     }
   ],
-  "senators": [ ... ]
+  "meta": { "count": 1 }
 }`;
 ---
 
@@ -39,7 +47,7 @@ const sample = `GET /members?state=GA&district=5
       <ul class="mt-6 space-y-3 text-navy-800">
         <li class="flex gap-3">
           <span class="text-blue-500">&#9679;</span>
-          Clean, predictable JSON with clear, standards-based error responses
+          Clean, predictable responses that follow the JSON:API spec, errors included
         </li>
         <li class="flex gap-3">
           <span class="text-blue-500">&#9679;</span>
