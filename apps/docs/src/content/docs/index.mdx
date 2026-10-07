@@ -1,22 +1,25 @@
 ---
 title: Engineering Overview
-description: How CivicDog is built — the data pipeline, API, AWS infrastructure, and automation behind the product.
+description: How CivicDog is built — the data pipeline, semantic search, API, AWS infrastructure, and automation behind the product.
 ---
 
 import MermaidDiagram from '../../components/MermaidDiagram.astro';
 
 CivicDog is an evolving, production civic-tech product suite: an ETL pipeline that syncs U.S. Congress
-member data from the official government API, a REST API that serves it, an app backend and React web
-app that make up the core product experience, and a WordPress plugin that puts the data in front of
-real site visitors. This section is a deep, honest walkthrough of how it's built — the architecture,
+members, bills, and roll call votes from the official government API, a REST API that serves it —
+including a **semantic search API** that answers natural-language questions about legislation — an app
+backend and React web app that make up the core product experience, and a WordPress plugin that puts
+the data in front of real site visitors. This section is a deep, honest walkthrough of how it's built — the architecture,
 the trade-offs, and the automation — for anyone who wants to see the engineering behind the product.
 
 ## System overview
 
 <MermaidDiagram code={`graph LR
-  A[Congress.gov API] -->|sync| B["cd-etl\\nAirflow DAG"]
-  B --> C[("PostgreSQL\\ncurrent_members view")]
+  A[Congress.gov API] -->|sync| B["cd-etl\\nAirflow DAGs"]
+  B -->|embed bills| I["AWS Bedrock\\nTitan Embeddings"]
+  B --> C[("PostgreSQL + pgvector\\nmembers · bills · votes")]
   C --> D["cd-api\\nFastAPI on Lambda"]
+  D -->|embed query| I
   C -->|customer data| H["cd-server\\napp backend"]
   D -->|x-api-key| E["cd-lookup\\nWordPress plugin"]
   D -->|Lambda invoke| H
@@ -32,6 +35,7 @@ the trade-offs, and the automation — for anyone who wants to see the engineeri
   style F fill:#ffffff,stroke:#8ba0bd
   style G fill:#eef3fa,stroke:#27619c
   style H fill:#eef3fa,stroke:#27619c
+  style I fill:#eef3fa,stroke:#27619c
 `} />
 
 ## The repos
@@ -49,7 +53,9 @@ CivicDog is split across five repositories, each with a single responsibility:
 ## Where to go next
 
 - **[Architecture](/architecture/)** — the repo map, the single-source-of-truth data model, and the local/prod parity philosophy.
-- **[Data Pipeline](/data-pipeline/)** — the Airflow DAG that keeps member data in sync.
+- **[Data Pipeline](/data-pipeline/)** — the Airflow DAGs that keep members, bills, and votes in sync.
+- **[Semantic Search](/semantic-search/)** — natural-language search over legislation: tiered
+  exact-match / similarity-fallback retrieval and the embedding pipeline behind it.
 - **[API](/api/)** — `cd-api`'s design: quick facts, a live OpenAPI reference, and its Lambda deployment.
 - **[Infrastructure](/infrastructure/)** — the Terraform-managed AWS stack, security posture, and cost trade-offs.
 - **[CI/CD & Automation](/cicd/)** — keyless deploys, container automation, and IaC scanning.
