@@ -29,6 +29,11 @@ The data model lives in Postgres, defined by Alembic migrations in `cd-etl`:
 - **`members`** — one row per Bioguide ID: biographical identity, and a `party_history` JSONB timeline
   (members can and do change party).
 - **`member_terms`** — one row per member per Congress they served in (chamber, district, term dates).
+- **`bills`** / **`bill_subjects`** — bills referenced by a roll call vote, with their CRS policy area,
+  legislative subjects, latest CRS summary, and a pgvector `crs_summary_embedding`.
+- **`roll_calls`** / **`roll_call_member_votes`** — House roll call votes and each member's position.
+- **`vocab_term_embeddings`** — one embedding per policy area / legislative subject, powering
+  [Semantic Search](/semantic-search/)'s exact-match tier.
 - **`current_members`** — a SQL *view* that joins the three tables above, derives "current party" via a
   `LEFT JOIN LATERAL` on the party history, and filters to whichever Congress is currently active.
 

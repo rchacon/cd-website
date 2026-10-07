@@ -1,12 +1,23 @@
 ---
 title: Data Pipeline
-description: How cd-etl's Airflow DAG keeps congressional member data in sync with Congress.gov.
+description: How cd-etl's Airflow DAGs keep congressional members, bills, votes, and embeddings in sync with Congress.gov.
 ---
 
-`cd-etl` is an Apache Airflow project (TaskFlow API) with a single DAG, `congress_members_etl`, that keeps
-the `members` and `member_terms` tables in sync with the official Congress.gov API.
+`cd-etl` is an Apache Airflow project (TaskFlow API) with three DAGs, all syncing from the official
+Congress.gov API:
 
-## The DAG, step by step
+- **`congress_members_etl`** — keeps the `members` and `member_terms` tables in sync (walked through
+  step by step below).
+- **`house_votes_etl`** — syncs House roll call votes and each member's position, syncing whatever bill a
+  vote references on demand the first time it's seen.
+- **`bills_etl`** — refreshes already-known bills daily (policy area, subjects, title, CRS summary), with a
+  per-bill backoff so settled bills aren't re-fetched every day.
+
+Every bill write — from either the votes DAG or the refresh DAG — goes through one shared function that
+also generates the bill's embedding for [Semantic Search](/semantic-search/), re-embedding only when the
+bill's content actually changed.
+
+## `congress_members_etl`, step by step
 
 1. **Sync the current Congress** — checks whether a new Congress needs to be inserted.
 2. **Determine the current Congress** from what's stored, via the shared `current_congress()` SQL function.
