@@ -1,0 +1,197 @@
+---
+title: Semantic Search
+description: How CivicDog answers plain-language questions about legislation — a tiered exact-match / similarity-fallback retrieval strategy over bills, backed by an incremental embedding pipeline.
+---
+
+import MermaidDiagram from '../../components/MermaidDiagram.astro';
+
+Most people don't know a bill's number, and they don't think in Congress.gov's official subject
+headings. They want to ask *"how did my representative vote on prescription drug prices?"* and get a
+straight answer. CivicDog's semantic search API is what makes that possible: a natural-language query
+goes in, and out come the bills that are actually about that topic — each one labelled with *why* it
+matched — ready to be joined against a member's voting record.
+
+It's built from two halves:
+
+- **A retrieval strategy** in `cd-api` (`GET /bills?filter[query]=…`) that tries a precise,
+  explainable exact match first and only falls back to fuzzy vector similarity when it has to.
+- **An embedding pipeline** in `cd-etl` that keeps every synced bill, and every term in Congress's
+  controlled subject vocabulary, embedded and up to date — incrementally, without re-paying for work
+  that hasn't changed.
+
+## Why tiered retrieval
+
+The obvious way to build this is pure vector search: embed every bill, embed the query, return the
+nearest neighbours. It works, but it has two weaknesses that matter for a civic product:
+
+1. **It's fuzzy even when it doesn't need to be.** The Congressional Research Service already tags
+   every bill with a curated **policy area** (one of ~30, like *Health* or *Immigration*) and a set of
+   **legislative subjects** (a controlled vocabulary of a few thousand terms, like *Prescription drugs*).
+   When a query clearly means one of those terms, an exact lookup on expert-assigned tags beats any
+   similarity score — it's both more precise and more complete.
+2. **It can't explain itself.** "This bill is 0.74 away from your query" isn't something you can show a
+   voter. "This bill is tagged *Prescription drugs* by the Congressional Research Service" is.
+
+So the search is tiered: **exact controlled-vocabulary match first, similarity search as the
+fallback** — and every result carries the tier it came from.
+
+## How a query is answered
+
+<MermaidDiagram code={`graph TD
+  Q["Natural-language query\\n'lowering prescription drug prices'"] --> E["Embed query\\nTitan Text Embeddings V2"]
+  E --> V{"Closest vocabulary term\\nwithin 0.25 cosine distance?"}
+  V -->|yes| T1["Tier 1: exact match\\nbills tagged with that\\npolicy area / subject"]
+  V -->|no| T2
+  T1 -->|slots left?| T2["Tier 2: similarity fallback\\ncosine search over bill\\nsummary embeddings"]
+  T2 --> F{"Within relevance\\nfloor (0.80)?"}
+  F -->|yes| R["Results, in tier order\\neach tagged with meta.matches"]
+  F -->|no| X["Excluded —\\nnever padded in"]
+  T1 --> R
+
+  style Q fill:#ffffff,stroke:#8ba0bd
+  style E fill:#eef3fa,stroke:#27619c
+  style V fill:#cfe0f2,stroke:#0a2246
+  style T1 fill:#eef3fa,stroke:#27619c
+  style T2 fill:#eef3fa,stroke:#27619c
+  style F fill:#cfe0f2,stroke:#0a2246
+  style R fill:#eef3fa,stroke:#27619c
+  style X fill:#ffffff,stroke:#8ba0bd
+`} />
+
+### Tier 1 — exact controlled-vocabulary match
+
+The query is embedded once, then compared against a `vocab_term_embeddings` table holding an embedding
+for every policy area and legislative subject the pipeline has ever seen. If the closest term is within
+a tight cosine-distance threshold, the query is treated as *meaning* that term, and bills are fetched by
+a plain, exact SQL match on `bills.policy_area` or `bill_subjects.subject_name`.
+
+The vocabulary table deliberately has **no approximate-nearest-neighbour index**. At a few thousand rows,
+a brute-force cosine scan is both fast and *exact* — an ANN index would trade away recall for no real
+speed benefit. The embedding similarity is only used to *pick a term*; the bills themselves are matched
+on the curated tags.
+
+### Tier 2 — similarity fallback
+
+Any result slots tier 1 didn't fill are handed to a cosine-similarity search directly over each bill's
+own embedding (its title plus its most recent CRS summary), excluding bills tier 1 already returned. This
+catches queries that don't map onto any single subject heading, and bills that are relevant but tagged
+under a different term.
+
+That column is served by a partial **HNSW** index (pgvector, `vector_cosine_ops`,
+`WHERE crs_summary_embedding IS NOT NULL`), matching exactly how it's queried.
+
+### A relevance floor, not a padded list
+
+Nearest-neighbour search always returns *something* — ask about a topic Congress hasn't touched and it
+will cheerfully return the ten least-unrelated bills. So tier 2 has a **relevance floor**: a bill farther
+than the threshold is excluded rather than padded in, and the API will return fewer results — even zero
+— when nothing in the corpus is genuinely about the query.
+
+The threshold isn't a guess. It was calibrated against real Titan V2 embeddings of real synced bills:
+genuinely on-topic matches clustered at **0.72–0.78** cosine distance across test queries, while queries
+with no related bill in the corpus only produced matches at **0.87+**. The floor sits at **0.80**, cleanly
+in the gap. The filter runs in SQL, so an empty result short-circuits the query itself.
+
+### Every result explains itself
+
+Results come back as a [JSON:API](https://jsonapi.org) collection, in tier order. Why a bill surfaced is
+search metadata, not a property of the bill, so it lives in per-resource `meta`, not `attributes`:
+
+```json
+{
+  "data": [
+    {
+      "type": "bill",
+      "id": "119-hr-2616",
+      "attributes": {
+        "congress": 119,
+        "bill_type": "HR",
+        "bill_number": 2616,
+        "title": "…",
+        "policy_area": "Health",
+        "crs_summary": "…"
+      },
+      "meta": { "matches": [{ "via": "subject" }] }
+    }
+  ],
+  "meta": { "query": "lowering prescription drug prices" }
+}
+```
+
+`via` is `policy_area` or `subject` for a tier-1 exact match, or `summary` for a tier-2 similarity match.
+It's a *list of objects* rather than a scalar on purpose: planned passage-level full-text search can add
+richer entries (`{"via": "text", "section", "excerpt", …}`) and let one bill carry several reasons,
+without a breaking change to the response shape.
+
+## The embedding pipeline
+
+All embeddings — bills, vocabulary terms, and queries — come from **Amazon Titan Text Embeddings V2** on
+AWS Bedrock, at 1024 dimensions, normalized. Titan was chosen over OpenAI/Cohere specifically to avoid a
+new external secret: at this scale cost is a wash, and authenticating through IAM task/Lambda roles via
+boto3's default credential chain matches every other AWS integration in the stack. Titan prices per
+token, not per dimension, so there's no cost reason to go below 1024. A single shared module in `cd-lib`
+is the only place either service talks to Bedrock, so the ETL and the API can't drift on model or
+dimensions — a query vector is compared directly against stored ones, so they must match exactly.
+
+### Embedding bills — only when something changed
+
+Embedding happens inside `bills_common.sync_bill()`, the one function every path that writes a bill goes
+through. It embeds the bill's title and most recent CRS summary together, and stores the vector in
+`bills.crs_summary_embedding` (pgvector `vector(1024)`).
+
+The expensive call is **gated on a content hash**: a bill is only re-embedded when its
+title/policy area/summary actually changed, or it has never been embedded. Without that, the daily
+refresh would re-embed every known bill every day for nothing.
+
+### Embedding the vocabulary — incrementally
+
+Policy areas and subjects are a short, shared, mostly-closed vocabulary, so they're embedded once per
+*term*, not once per bill. After each bill sync, any of its terms not already in `vocab_term_embeddings`
+are embedded and inserted (`ON CONFLICT DO NOTHING`, since two concurrent bill syncs can race to embed
+the same new term). A term's text never changes, so there's nothing to schedule — the vocabulary simply
+grows as new bills introduce new subjects.
+
+### Keeping it fresh
+
+Bills enter the corpus **on demand**: the House votes DAG syncs (and embeds) whatever bill a roll call
+references the first time it sees it — of ~18,000 bills in a Congress, only the few hundred that actually
+get a vote are ever relevant to a voting record, so proactively embedding all of them would be wasted
+spend. A separate `bills_etl` DAG then refreshes already-known bills on a daily schedule, with a 7-day
+per-bill backoff, picking up reassigned policy areas, added subjects, and new CRS summaries as a bill
+moves through Congress — and, via the content hash, re-embedding only those that changed.
+
+### Failing safely
+
+An embedding is metadata, not the bill itself — a Bedrock hiccup during sync logs and leaves the
+embedding unset (to be filled on a later refresh) rather than failing the sync that the voting-record
+data depends on. Upstream guards also stop a degraded API response from nulling out a previously good
+summary, so a single bad fetch can't silently erase a bill's embedding input.
+
+## Serving it
+
+`GET /bills` runs in `cd-api` on AWS Lambda. A few production details:
+
+- **Fail fast, fail retryable.** If the query can't be embedded, there's nothing to fall back to — the
+  embedding *is* the query — so the API returns a **503**, not a generic 500. Bedrock calls carry explicit
+  botocore connect/read timeouts and a bounded retry budget that fits inside the Lambda's own timeout.
+  That's a lesson from launch: a missing 443 egress rule on the Lambda's security group made Bedrock calls
+  hang past the function timeout into an uncatchable 500. The fix was one Terraform rule; the timeouts make
+  sure a future network break fails as a clean, catchable 503 instead.
+- **Cacheable by design.** Topic discovery is member-agnostic and side-effect-free, so a response depends
+  on the query alone.
+- **Composed, not coupled.** "How did *my* representative vote on this?" is a second, separate endpoint,
+  `GET /members/{bioguide_id}/votes?filter[bill]=…`, keyed by the canonical bill ids search returns.
+  `cd-server`, the backend for the web app, composes the two behind GraphQL: `discoverBills(q)` for
+  topic search alone, and `searchBills(bioguideId, q)` for topic search joined against a member's voting
+  record — where a matched bill the member never voted on comes back with `votes: []`, a first-class
+  "no vote on record" state rather than a silently dropped row.
+
+## What's next
+
+- **Full bill text.** Today's tier 2 searches title + CRS summary. Syncing full legislative text and
+  adding **passage-level** semantic search — chunked text, a three-way retrieval merge, and `matches`
+  entries that point at the exact section and excerpt — is the planned next step, and the response shape
+  above was designed so it lands as an additive change.
+- **Threshold tuning on real traffic.** The tier-2 relevance floor is empirically calibrated; the tier-1
+  vocabulary threshold is a deliberately conservative starting point, to be tuned once real query traffic
+  exists.
