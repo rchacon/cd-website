@@ -10,8 +10,8 @@ Congress.gov API:
   step by step below).
 - **`house_votes_etl`** — syncs House roll call votes and each member's position, syncing whatever bill a
   vote references on demand the first time it's seen.
-- **`bills_etl`** — refreshes already-known bills daily (policy area, subjects, title, CRS summary), with a
-  per-bill backoff so settled bills aren't re-fetched every day.
+- **`bills_etl`** — runs daily to refresh already-known bills (policy area, subjects, title, CRS summary),
+  re-checking each bill at most once every 7 days so settled bills aren't re-fetched every day.
 
 Every bill write — from either the votes DAG or the refresh DAG — goes through one shared function that
 also generates the bill's embedding for [Semantic Search](/semantic-search/), re-embedding only when the

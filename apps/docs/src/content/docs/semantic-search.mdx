@@ -156,8 +156,8 @@ grows as new bills introduce new subjects.
 Bills enter the corpus **on demand**: the House votes DAG syncs (and embeds) whatever bill a roll call
 references the first time it sees it — of ~18,000 bills in a Congress, only the few hundred that actually
 get a vote are ever relevant to a voting record, so proactively embedding all of them would be wasted
-spend. A separate `bills_etl` DAG then refreshes already-known bills on a daily schedule, with a 7-day
-per-bill backoff, picking up reassigned policy areas, added subjects, and new CRS summaries as a bill
+spend. A separate `bills_etl` DAG then runs daily to refresh already-known bills, re-checking each bill at
+most once every 7 days, picking up reassigned policy areas, added subjects, and new CRS summaries as a bill
 moves through Congress — and, via the content hash, re-embedding only those that changed.
 
 ### Failing safely
