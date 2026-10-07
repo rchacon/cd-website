@@ -65,9 +65,9 @@ for every policy area and legislative subject the pipeline has ever seen. If the
 a tight cosine-distance threshold, the query is treated as *meaning* that term, and bills are fetched by
 a plain, exact SQL match on `bills.policy_area` or `bill_subjects.subject_name`.
 
-The vocabulary table deliberately has **no approximate-nearest-neighbour index**. At a few thousand rows,
-a brute-force cosine scan is both fast and *exact* — an ANN index would trade away recall for no real
-speed benefit. The embedding similarity is only used to *pick a term*; the bills themselves are matched
+Finding the closest term just compares the query against **every** term. At a few thousand rows that's
+fast and always exact, so there's deliberately no approximate index trading accuracy for speed it doesn't
+need — and accuracy matters here, since the chosen term decides which bills come back. The embedding similarity is only used to *pick a term*; the bills themselves are matched
 on the curated tags.
 
 ### Tier 2 — similarity fallback
