@@ -57,7 +57,7 @@ to guess.
 
 ## Testing without a real WordPress install
 
-The full PHPUnit suite (~1,100 lines: six test files plus a stub bootstrap) runs entirely offline. `tests/bootstrap.php` stubs
+The full PHPUnit suite runs entirely offline. `tests/bootstrap.php` stubs
 WordPress core functions (`add_action`, `get_option`, `get_transient`, the Settings API, etc.) directly —
 and the plugin's own `get_district()` / `fetch_members()` functions use `function_exists()` guards so
 production code and test doubles can coexist in the same file without a mocking framework or a live
