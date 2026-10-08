@@ -29,6 +29,11 @@ The data model lives in Postgres, defined by Alembic migrations in `cd-etl`:
 - **`members`** — one row per Bioguide ID: biographical identity, and a `party_history` JSONB timeline
   (members can and do change party).
 - **`member_terms`** — one row per member per Congress they served in (chamber, district, term dates).
+- **`bills`** / **`bill_subjects`** — bills referenced by a roll call vote, with their CRS policy area,
+  legislative subjects, latest CRS summary, and a pgvector `crs_summary_embedding`.
+- **`roll_calls`** / **`roll_call_member_votes`** — House roll call votes and each member's position.
+- **`vocab_term_embeddings`** — one embedding per policy area / legislative subject, powering
+  [Semantic Search](/semantic-search/)'s exact-match tier.
 - **`current_members`** — a SQL *view* that joins the three tables above, derives "current party" via a
   `LEFT JOIN LATERAL` on the party history, and filters to whichever Congress is currently active.
 
@@ -57,5 +62,5 @@ dev or in prod.
 - **Same artifact everywhere.** Docker images are built once and promoted, never rebuilt per-environment.
 - **Small, single-purpose repos.** Infra, ETL/API, the web app, and the WordPress consumer evolve and
   deploy independently.
-- **Defensive by default.** Hash-guarded upserts, apportionment-validated districts, and RFC 9457 error
-  bodies — see [Data Pipeline](/data-pipeline/) and [API](/api/) for specifics.
+- **Defensive by default.** Hash-guarded upserts, apportionment-validated districts, and standard error
+  bodies (JSON:API error documents, RFC 9457 problem details) — see [Data Pipeline](/data-pipeline/) and [API](/api/) for specifics.

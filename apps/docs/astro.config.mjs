@@ -12,7 +12,7 @@ export default defineConfig({
   integrations: [
     starlight({
       title: 'CivicDog',
-      description: 'How CivicDog is built: data pipeline, API, AWS infrastructure, and automation.',
+      description: 'How CivicDog is built: data pipeline, semantic search, API, AWS infrastructure, and automation.',
       logo: {
         src: './src/assets/civicdog-mark.png',
         alt: 'CivicDog'
@@ -30,6 +30,7 @@ export default defineConfig({
         { label: 'Overview', link: '/' },
         { label: 'Architecture', link: '/architecture/' },
         { label: 'Data Pipeline', link: '/data-pipeline/' },
+        { label: 'Semantic Search', link: '/semantic-search/' },
         { label: 'API', link: '/api/' },
         { label: 'Infrastructure', link: '/infrastructure/' },
         { label: 'CI/CD & Automation', link: '/cicd/' },
