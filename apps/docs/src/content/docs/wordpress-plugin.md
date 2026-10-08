@@ -12,8 +12,10 @@ site.
 A site visitor types a street address into the `[cd_lookup]` shortcode's form. The plugin:
 
 1. Resolves the address to a congressional district via the **Census Bureau's geocoding API**.
-2. Calls **`cd-api`**'s `/members` endpoint (authenticated with an `x-api-key`, configured under
-   **Settings → CD Lookup**) to get the actual senators and representative.
+2. Calls **`cd-api`**'s JSON:API `GET /members?filter[state]=XX` (authenticated with an `x-api-key`,
+   configured under **Settings → CD Lookup**). One call returns the whole state delegation; the plugin
+   regroups it into senators and the representative for the visitor's district, comparing districts
+   numerically so an at-large `0` matches however it's formatted.
 3. Renders the result client-side, via a small vanilla-JS widget with no build step.
 
 ## Caching, deduplicated into one abstraction
@@ -50,7 +52,7 @@ to guess.
 
 ## Testing without a real WordPress install
 
-The full PHPUnit suite (~800 lines across 5 files) runs entirely offline. `tests/bootstrap.php` stubs
+The full PHPUnit suite runs entirely offline. `tests/bootstrap.php` stubs
 WordPress core functions (`add_action`, `get_option`, `get_transient`, the Settings API, etc.) directly —
 and the plugin's own `get_district()` / `fetch_members()` functions use `function_exists()` guards so
 production code and test doubles can coexist in the same file without a mocking framework or a live
