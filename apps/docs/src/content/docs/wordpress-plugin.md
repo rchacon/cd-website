@@ -31,11 +31,6 @@ cd_lookup_cached($cache_key, $ttl, $is_valid, $compute)
 using WordPress's Transients API underneath. One commit (`a56caa0`) extracted this specifically to
 deduplicate what had been two copies of the same caching logic.
 
-Member lookups stay cached per state *and* district, even though one API call now returns the whole
-state. That means every district in a large state stores its own copy of the same few-KB payload within
-an hour. It's a known, accepted trade-off: a state-keyed cache with district filtering on read would save
-little at this traffic level.
-
 ## The sanitization boundary
 
 Data returned by the plugin's REST route gets rendered into the page via client-side `innerHTML`. That's
