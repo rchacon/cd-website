@@ -62,5 +62,5 @@ dev or in prod.
 - **Same artifact everywhere.** Docker images are built once and promoted, never rebuilt per-environment.
 - **Small, single-purpose repos.** Infra, ETL/API, the web app, and the WordPress consumer evolve and
   deploy independently.
-- **Defensive by default.** Hash-guarded upserts, apportionment-validated districts, and RFC 9457 error
-  bodies — see [Data Pipeline](/data-pipeline/) and [API](/api/) for specifics.
+- **Defensive by default.** Hash-guarded upserts, apportionment-validated districts, and standard error
+  bodies (JSON:API error documents, RFC 9457 problem details) — see [Data Pipeline](/data-pipeline/) and [API](/api/) for specifics.

@@ -40,7 +40,7 @@ const headings = [
     <li><strong>Base URL:</strong> <code>https://api.civicdog.com/v1</code></li>
     <li><strong>Auth:</strong> <code>x-api-key</code> header, required on every route</li>
     <li><strong>Format:</strong> <a href="https://jsonapi.org">JSON:API</a> resources for members, bills, and votes</li>
-    <li><strong>Errors:</strong> <code>application/problem+json</code> per <a href="https://www.rfc-editor.org/rfc/rfc9457">RFC 9457</a>, never a bespoke <code>{'{ "error": "..." }'}</code> shape</li>
+    <li><strong>Errors:</strong> <a href="https://jsonapi.org/format/#errors">JSON:API error documents</a> (<code>{'{ "errors": [...] }'}</code>) on the JSON:API endpoints, <code>application/problem+json</code> per <a href="https://www.rfc-editor.org/rfc/rfc9457">RFC 9457</a> on <code>GET /version</code> — never a bespoke <code>{'{ "error": "..." }'}</code> shape</li>
   </ul>
 
   <h2 id={SCHEMA_HEADING.slug}>{SCHEMA_HEADING.text}</h2>
