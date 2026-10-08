@@ -12,8 +12,10 @@ site.
 A site visitor types a street address into the `[cd_lookup]` shortcode's form. The plugin:
 
 1. Resolves the address to a congressional district via the **Census Bureau's geocoding API**.
-2. Calls **`cd-api`**'s `/members` endpoint (authenticated with an `x-api-key`, configured under
-   **Settings → CD Lookup**) to get the actual senators and representative.
+2. Calls **`cd-api`**'s JSON:API `GET /members?filter[state]=XX` (authenticated with an `x-api-key`,
+   configured under **Settings → CD Lookup**). One call returns the whole state delegation; the plugin
+   regroups it into senators and the representative for the visitor's district, comparing districts
+   numerically so an at-large `0` matches however it's formatted.
 3. Renders the result client-side, via a small vanilla-JS widget with no build step.
 
 ## Caching, deduplicated into one abstraction
@@ -28,6 +30,11 @@ cd_lookup_cached($cache_key, $ttl, $is_valid, $compute)
 
 using WordPress's Transients API underneath. One commit (`a56caa0`) extracted this specifically to
 deduplicate what had been two copies of the same caching logic.
+
+Member lookups stay cached per state *and* district, even though one API call now returns the whole
+state. That means every district in a large state stores its own copy of the same few-KB payload within
+an hour. It's a known, accepted trade-off: a state-keyed cache with district filtering on read would save
+little at this traffic level.
 
 ## The sanitization boundary
 
@@ -50,7 +57,7 @@ to guess.
 
 ## Testing without a real WordPress install
 
-The full PHPUnit suite (~800 lines across 5 files) runs entirely offline. `tests/bootstrap.php` stubs
+The full PHPUnit suite (~1,100 lines: six test files plus a stub bootstrap) runs entirely offline. `tests/bootstrap.php` stubs
 WordPress core functions (`add_action`, `get_option`, `get_transient`, the Settings API, etc.) directly —
 and the plugin's own `get_district()` / `fetch_members()` functions use `function_exists()` guards so
 production code and test doubles can coexist in the same file without a mocking framework or a live
