@@ -25,8 +25,16 @@ bill's content actually changed.
 4. **Diff against stored `updateDate`** — skip members whose upstream data hasn't changed since the last
    run, instead of re-fetching and re-writing everyone every time.
 5. **Fetch full member details in parallel**, via a `ThreadPoolExecutor`, for members that did change.
-6. **Transform** the API's shape into the internal schema.
-7. **Upsert**, hash-guarded — see below.
+6. **Fetch the legislators crosswalk**, concurrently with steps 1–5: `legislators-current.yaml` from the
+   public `unitedstates/congress-legislators` project, unrelated to Congress.gov. It supplies each
+   senator's editorially maintained senior/junior rank and their Senate LIS ID (which Senate vote data
+   is keyed by). This task never raises: if the source is broken or unreachable, it logs and returns
+   nothing, so the run simply makes no crosswalk update today instead of failing the member sync.
+7. **Transform** the API's shape into the internal schema, plus a list of crosswalk rows.
+8. **Upsert members and terms**, hash-guarded — see below.
+9. **Apply the crosswalk** as a plain `UPDATE` (never an insert) of rank and LIS ID. It's a separate task
+   that runs strictly after step 8 has committed, so a crosswalk failure gets its own Airflow retries and
+   shows up as a failed task, without ever blocking or rolling back the member sync.
 
 ## `house_votes_etl`, step by step
 
@@ -73,9 +81,11 @@ votes get recorded correctly.
 
 ## Hash-guarded upserts
 
-Every member row carries a `source_hash`. On upsert, the incoming record's hash is compared to what's
-stored; `updated_at` only changes if the hash actually changed. Two details make this robust rather than
-just "close enough":
+Members, roll calls, and bills each carry a `source_hash` of their upstream content. For members and roll
+calls, the upsert compares the incoming hash to what's stored, and `updated_at` only changes if the hash
+actually changed. For bills, the same hash decides whether the bill needs a new embedding for
+[Semantic Search](/semantic-search/), so unchanged bills never cost a Bedrock call. On the members side,
+two details make this robust rather than just "close enough":
 
 - **`party_history` is sorted before hashing.** Congress.gov doesn't guarantee stable ordering across
   calls, so hashing an unsorted array would produce spurious diffs — and spurious `updated_at` bumps —
@@ -90,9 +100,13 @@ A few other things worth calling out, because they're the kind of edge case that
 silently:
 
 - Member terms distinguish chamber, district, and member type explicitly, rather than inferring them.
-- The pipeline is aware of known upstream gaps (e.g., senior/junior senator distinction, year-only
-  end-date precision in some historical records) and tracks them as open issues rather than silently
-  guessing.
+- **Senior/junior senator** isn't something Congress.gov provides, and deriving it from service history
+  gets the tie-breaks wrong (prior House or gubernatorial service, then alphabetical order). Rather than
+  approximating, it's sourced from the congress-legislators crosswalk above, which records each
+  senator's rank editorially.
+- **Known upstream gaps are tracked, not papered over.** Congress.gov gives term end dates only to the
+  year, which can't distinguish a member who left in March from one still serving in December. That's
+  tracked as an open issue rather than guessed at.
 
 ## Testing
 
@@ -106,11 +120,14 @@ database, so test runs and normal local development don't race each other's migr
 
 ## Deployment
 
-`cd-etl` doesn't have its own CI/CD pipeline to AWS. Instead:
+Airflow runs as four ECS services on a single EC2 instance (scheduler, DAG processor, triggerer, API
+server), all from the same `cd-etl` image. A `cd-etl-v*` tag:
 
-1. A `cd-etl-v*` tag triggers a GitHub Actions workflow that builds the Docker image and pushes it to
-   **GHCR** (not ECR — see [CI/CD & Automation](/cicd/) for why).
-2. A **Watchtower** sidecar container running on the Airflow EC2 host polls GHCR and pulls new images
-   automatically.
+1. Checks the tag matches the version in `pyproject.toml`, so a mistyped tag can't ship.
+2. Builds the production image and pushes it to **GHCR**, tagged with the version and `latest`.
+3. Assumes a deploy role via GitHub OIDC, with no stored AWS credentials.
+4. Runs a one-shot **migrate task** and waits for it to exit cleanly. If migrations fail, the workflow
+   stops before any service is touched, so nothing ever runs against a half-migrated schema.
+5. Force-redeploys all four services onto the new image.
 
-No AWS credentials are ever involved in this path — the deploy pipeline never talks to AWS at all.
+See [CI/CD & Automation](/cicd/) for how this compares to the other services' deploy paths.
