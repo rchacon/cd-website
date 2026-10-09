@@ -10,7 +10,8 @@ CivicDog is deliberately split into small, single-responsibility repos rather th
 - **`cd-platform`** — a Python monorepo containing three independently versioned, independently deployed
   services: `cd-etl` (the Airflow ingestion pipeline), `cd-api` (the FastAPI service that serves
   `cd-lookup`), and `cd-server` (the app backend for `cd-webapp`). Each has its own `pyproject.toml`, its
-  own README, and its own release tag pattern (`cd-etl-v*`, `cd-api-v*`, `cd-server-v*`).
+  own README, and its own release tag pattern (`cd-etl-v*`, `cd-api-v*`, `cd-server-v*`). Alongside them
+  sits `cd-lib`, a shared library (see below).
 - **`cd-webapp`** — the React web app at `app.civicdog.com`, the core product experience. Its own
   toolchain (npm, its own CI), entirely separate from the Python services it talks to.
 - **`cd-lookup`** — a WordPress plugin, PHP, entirely separate tooling (Composer, PHPUnit, WordPress
@@ -21,7 +22,29 @@ CivicDog is deliberately split into small, single-responsibility repos rather th
 This separation means a change to the WordPress plugin never touches Python CI, and a Terraform change
 never triggers an application redeploy.
 
-## Single source of truth: `current_members`
+## Shared code without a package registry: `cd-lib`
+
+All three Python services depend on `cd-lib`: the Pydantic and JSON:API models `cd-server` validates
+`cd-api`'s responses against, the Bedrock embedding client shared by `cd-etl` and `cd-api`, and the
+congressional apportionment table used to validate districts. A few deliberate choices:
+
+- **A local path dependency, not a published package or a `uv` workspace.** Each service keeps its own
+  `pyproject.toml` and lockfile and points at `../cd-lib`. No registry to run, and no shared lockfile
+  coupling three independently deployed services together.
+- **Only what's actually shared.** Models that only one service uses stay in that service. `cd-lib`
+  isn't a dumping ground.
+- **Liberal in what it accepts.** The shared models ignore unknown fields. Services deploy independently,
+  so if a new `cd-api` response field broke validation in an older `cd-server`, every additive API change
+  would force a lockstep deploy.
+- **Editable installs only where they're safe.** The container-built services install `cd-lib` as
+  editable; `cd-api`'s Lambda zip doesn't. An editable install there produces only a `.pth` file
+  pointing at the build machine's checkout, not real copied files — found empirically, and it silently
+  breaks the deployed zip.
+- **One `cd` namespace from two places.** Each service's `cd.<service>` and `cd-lib`'s `cd.lib` are
+  installed from separate locations, so no service has its own `cd/__init__.py`. That makes `cd` an
+  implicit PEP 420 namespace package that merges both, rather than one hiding the other.
+
+## Single source of truth: `current_congress()`
 
 The data model lives in Postgres, defined by Alembic migrations in `cd-etl`:
 
@@ -34,14 +57,16 @@ The data model lives in Postgres, defined by Alembic migrations in `cd-etl`:
 - **`roll_calls`** / **`roll_call_member_votes`** — House roll call votes and each member's position.
 - **`vocab_term_embeddings`** — one embedding per policy area / legislative subject, powering
   [Semantic Search](/semantic-search/)'s exact-match tier.
-- **`current_members`** — a SQL *view* that joins the three tables above, derives "current party" via a
-  `LEFT JOIN LATERAL` on the party history, and filters to whichever Congress is currently active.
+- **`current_members`** — a SQL *view* that joins `congresses`, `members`, and `member_terms`, derives
+  "current party" via a `LEFT JOIN LATERAL` on the party history, filters to whichever Congress is
+  currently active, and exposes whether each member is still `in_office`.
 
 Both the ETL job and the API need to agree on "what Congress is current right now." Rather than
 duplicating that logic in Python and SQL and letting them drift, it's a single SQL function,
-`current_congress()`, that both the ETL upsert logic and the `current_members` view call. `cd-api` never
-queries the raw tables — it only ever reads from `current_members`, so the API's notion of "current" can
-never diverge from the ETL's.
+`current_congress()`, that both the ETL and the `current_members` view call. `cd-api`'s member endpoints
+never query the raw member tables. They only read `current_members`, so the API's notion of "current"
+can never diverge from the ETL's. Bill search and voting records read `bills`, `roll_calls`, and their
+related tables directly, since there's no "current" question to get wrong there.
 
 ## Local/prod parity
 
