@@ -120,11 +120,14 @@ database, so test runs and normal local development don't race each other's migr
 
 ## Deployment
 
-`cd-etl` doesn't have its own CI/CD pipeline to AWS. Instead:
+Airflow runs as four ECS services on a single EC2 instance (scheduler, DAG processor, triggerer, API
+server), all from the same `cd-etl` image. A `cd-etl-v*` tag:
 
-1. A `cd-etl-v*` tag triggers a GitHub Actions workflow that builds the Docker image and pushes it to
-   **GHCR** (not ECR — see [CI/CD & Automation](/cicd/) for why).
-2. A **Watchtower** sidecar container running on the Airflow EC2 host polls GHCR and pulls new images
-   automatically.
+1. Checks the tag matches the version in `pyproject.toml`, so a mistyped tag can't ship.
+2. Builds the production image and pushes it to **GHCR**, tagged with the version and `latest`.
+3. Assumes a deploy role via GitHub OIDC, with no stored AWS credentials.
+4. Runs a one-shot **migrate task** and waits for it to exit cleanly. If migrations fail, the workflow
+   stops before any service is touched, so nothing ever runs against a half-migrated schema.
+5. Force-redeploys all four services onto the new image.
 
-No AWS credentials are ever involved in this path — the deploy pipeline never talks to AWS at all.
+See [CI/CD & Automation](/cicd/) for how this compares to the other services' deploy paths.

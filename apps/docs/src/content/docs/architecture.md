@@ -72,13 +72,13 @@ related tables directly, since there's no "current" question to get wrong there.
 
 `cd-etl` ships as the same Docker image locally and in production. Locally, `make start-etl` runs it in
 Docker Compose against a local Postgres. In production, the exact same image (built once, tagged, pushed
-to GHCR) is pulled by a Watchtower sidecar running on the Airflow EC2 host. There's no separate
+to GHCR) runs as four ECS services: Airflow's scheduler, DAG processor, triggerer, and API server. There's no separate
 "deployment version" of the container — what you run on your laptop is what runs in AWS, which rules out
 an entire class of "works locally, breaks in prod" bugs.
 
 The container entrypoint also runs migrations automatically on every start — both Airflow's own metadata
 migrations and the app's Alembic migrations — so there's no "forgot to migrate" failure mode either in
-dev or in prod.
+dev or in prod. `cd-server` follows the same model with its own image and database.
 
 ## Design principles
 
