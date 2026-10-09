@@ -7,13 +7,7 @@ const { code } = Astro.props;
 ---
 
 <div class="not-content mermaid-figure">
-  <div
-    class="mermaid-card"
-    role="button"
-    tabindex="0"
-    aria-haspopup="dialog"
-    aria-label="Enlarge diagram"
-  >
+  <div class="mermaid-card">
     <pre class="mermaid">{code}</pre>
     <span class="enlarge-hint" aria-hidden="true">
       <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -44,11 +38,16 @@ const { code } = Astro.props;
     border-radius: 1rem;
     padding: 1.5rem 1.5rem 2.25rem;
     overflow-x: auto;
-    cursor: zoom-in;
     transition: border-color 0.15s ease, box-shadow 0.15s ease;
   }
 
-  .mermaid-card:hover {
+  /* Only a diagram drawn noticeably smaller than its natural size is
+     enlargeable -- the script toggles this class. */
+  .mermaid-card.is-enlargeable {
+    cursor: zoom-in;
+  }
+
+  .mermaid-card.is-enlargeable:hover {
     border-color: #27619c;
     box-shadow: 0 2px 12px rgba(10, 34, 70, 0.08);
   }
@@ -59,16 +58,20 @@ const { code } = Astro.props;
   }
 
   .enlarge-hint {
+    display: none;
     position: absolute;
     right: 1rem;
     bottom: 0.65rem;
-    display: inline-flex;
     align-items: center;
     gap: 0.35rem;
     font-size: 0.8rem;
     color: #27619c;
     opacity: 0.75;
     pointer-events: none;
+  }
+
+  .mermaid-card.is-enlargeable .enlarge-hint {
+    display: inline-flex;
   }
 
   .mermaid-card:hover .enlarge-hint,
@@ -120,25 +123,17 @@ const { code } = Astro.props;
   }
 
   /* The enlarged SVG is a clone inserted by the script below, so it has no
-     scoped-style attribute -- :global() is what reaches it. */
+     scoped-style attribute -- :global() is what reaches it. Its pixel size is
+     set by the script; the body scrolls if that's bigger than the dialog. */
   .mermaid-dialog-body :global(svg) {
     display: block;
-    width: 100%;
-    height: auto;
-    max-height: calc(92vh - 4.25rem);
+    max-width: none;
     margin-inline: auto;
   }
 
-  /* On a phone, fitting a wide diagram to the screen width makes it no bigger
-     than the inline one -- give it a readable minimum width and let it pan. */
   @media (max-width: 640px) {
     .mermaid-dialog {
       padding-inline: 0.75rem;
-    }
-
-    .mermaid-dialog-body :global(svg) {
-      min-width: 720px;
-      max-height: none;
     }
   }
 </style>
@@ -167,20 +162,69 @@ const { code } = Astro.props;
     const dialog = figure.querySelector<HTMLDialogElement>('.mermaid-dialog')!;
     const body = dialog.querySelector<HTMLElement>('.mermaid-dialog-body')!;
 
+    const inlineSvg = () => card.querySelector<SVGSVGElement>('pre.mermaid svg');
+
+    // How much the inline drawing is scaled relative to its natural
+    // (viewBox) size. Below this threshold the diagram has been squeezed to
+    // fit the content column and enlarging it helps; at or near full size
+    // (e.g. a tall, narrow diagram on desktop), "enlarging" would only fit it
+    // to the window -- i.e. make it smaller -- so it isn't offered.
+    const ENLARGEABLE_BELOW = 0.9;
+    const inlineScale = (svg: SVGSVGElement) => {
+      const vw = svg.viewBox.baseVal.width;
+      return vw ? svg.getBoundingClientRect().width / vw : 1;
+    };
+
+    const setEnlargeable = () => {
+      const svg = inlineSvg();
+      const on = !!svg && inlineScale(svg) < ENLARGEABLE_BELOW;
+      card.classList.toggle('is-enlargeable', on);
+      if (on) {
+        card.setAttribute('role', 'button');
+        card.setAttribute('tabindex', '0');
+        card.setAttribute('aria-haspopup', 'dialog');
+        card.setAttribute('aria-label', 'Enlarge diagram');
+      } else {
+        for (const a of ['role', 'tabindex', 'aria-haspopup', 'aria-label']) card.removeAttribute(a);
+      }
+    };
+    setEnlargeable();
+    // The inline scale changes with the window width (a diagram can be full
+    // size on desktop but squeezed on a phone).
+    new ResizeObserver(setEnlargeable).observe(card);
+
     const open = () => {
-      const svg = card.querySelector<SVGSVGElement>('pre.mermaid svg');
-      if (!svg) return;
+      const svg = inlineSvg();
+      if (!svg || !card.classList.contains('is-enlargeable')) return;
       // A fresh clone per open, so the dialog never holds a stale copy.
-      // Mermaid pins the inline SVG with an inline max-width; dropping it
-      // lets the clone scale up to fill the dialog instead.
+      // Mermaid pins the inline SVG with an inline max-width; the clone's
+      // size is set explicitly by sizeClone() instead.
       const clone = svg.cloneNode(true) as SVGSVGElement;
       clone.style.removeProperty('max-width');
+      clone.removeAttribute('width');
       clone.removeAttribute('height');
       // Mermaid scopes its generated <style> to the SVG's id; renaming the
       // clone would break that, but two elements sharing an id only matters
       // for lookups, which nothing here does.
       body.replaceChildren(clone);
       dialog.showModal();
+      sizeClone(clone, svg);
+    };
+
+    // Fits the whole diagram in the dialog when that's at least natural size;
+    // otherwise shows it at natural size (readable) and lets the dialog
+    // scroll. On wide screens natural size is capped at the dialog's width
+    // (scroll down, never sideways); on phones it may exceed it and pan.
+    const sizeClone = (clone: SVGSVGElement, inline: SVGSVGElement) => {
+      const { width: vw, height: vh } = inline.viewBox.baseVal;
+      if (!vw || !vh) return;
+      const availW = body.clientWidth;
+      const availH = parseFloat(getComputedStyle(body).maxHeight) || window.innerHeight * 0.8;
+      const fit = Math.min(availW / vw, availH / vh);
+      const wide = window.matchMedia('(min-width: 641px)').matches;
+      const scale = Math.max(fit, wide ? Math.min(1, availW / vw) : 1);
+      clone.style.width = `${vw * scale}px`;
+      clone.style.height = `${vh * scale}px`;
     };
 
     card.addEventListener('click', open);
