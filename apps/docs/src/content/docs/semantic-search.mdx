@@ -37,24 +37,20 @@ fallback** — and every result carries the tier it came from.
 
 ## How a query is answered
 
-<MermaidDiagram code={`graph TD
-  Q["Natural-language query\\n'lowering prescription drug prices'"] --> E["Embed query\\nTitan Text Embeddings V2"]
-  E --> V{"Closest vocabulary term\\nwithin 0.25 cosine distance?"}
-  V -->|yes| T1["Tier 1: exact match\\nbills tagged with that\\npolicy area / subject"]
-  V -->|no| T2
-  T1 -->|slots left?| T2["Tier 2: similarity fallback\\ncosine search over bill\\nsummary embeddings"]
-  T2 --> F{"Within relevance\\nfloor (0.80)?"}
-  F -->|yes| R["Results, in tier order\\neach tagged with meta.matches"]
-  F -->|no| X["Excluded —\\nnever padded in"]
-  T1 --> R
+<MermaidDiagram code={`graph LR
+  Q["Query\\n'lowering drug prices'"] --> E["Embed query\\nTitan V2"]
+  E -->|"vocab term\\nwithin 0.25"| T1["Tier 1\\nexact tag match"]
+  E -->|"no close term"| T2["Tier 2\\nsummary similarity"]
+  T1 -->|"slots left"| T2
+  T1 --> R["Results, in tier order\\ntagged with meta.matches"]
+  T2 -->|"within 0.80"| R
+  T2 -.->|"beyond 0.80"| X["Excluded,\\nnever padded in"]
 
   style Q fill:#ffffff,stroke:#8ba0bd
   style E fill:#eef3fa,stroke:#27619c
-  style V fill:#cfe0f2,stroke:#0a2246
   style T1 fill:#eef3fa,stroke:#27619c
   style T2 fill:#eef3fa,stroke:#27619c
-  style F fill:#cfe0f2,stroke:#0a2246
-  style R fill:#eef3fa,stroke:#27619c
+  style R fill:#cfe0f2,stroke:#0a2246
   style X fill:#ffffff,stroke:#8ba0bd
 `} />
 
