@@ -77,7 +77,7 @@ Real numbers, documented in the repo rather than assumed:
 
 | Decision | Alternative considered | Cost |
 |---|---|---|
-| Self-hosted Airflow on ECS (one EC2 `t3.medium`) | AWS MWAA | ~$30/mo on-demand vs. ~$358/mo |
+| Self-hosted Airflow on ECS (one EC2 `t3.medium`) | AWS MWAA | Under ~$40/mo (actual billed EC2) vs. ~$358/mo |
 | ECS on EC2 | ECS on Fargate | Fixed instance cost for always-on services, no per-task premium |
 | SSM Session Manager | AWS Client VPN | Free vs. ~$72/mo per subnet association |
 | Single shared NAT Gateway | One NAT Gateway per AZ | ~$32/mo vs. ~$64/mo |
