@@ -1,0 +1,147 @@
+---
+title: Web App & Backend
+description: How cd-webapp and cd-server work together — a GraphQL backend composing cd-api, Census geocoding, Cognito auth, and Bedrock-powered AI voting-record summaries with daily caps.
+---
+
+import MermaidDiagram from '../../components/MermaidDiagram.astro';
+
+[`cd-webapp`](https://app.civicdog.com) is CivicDog's core product: find your representatives by address
+or by your current location, open a member's page, search their voting record in plain language, and
+get an AI summary of how they voted on a topic. It's a React app that talks to exactly one backend,
+`cd-server`, a GraphQL service built for it.
+
+## The request path
+
+<MermaidDiagram code={`graph LR
+  W["cd-webapp\\nReact + Vite"] -->|"GraphQL\\nBearer ID token"| S["cd-server\\nFastAPI + Strawberry"]
+  W -->|PKCE sign-in| C["Cognito\\nUser Pool"]
+  S -->|"verify JWT\\n(JWKS)"| C
+  S -->|"Lambda invoke\\n(boto3, IAM)"| A["cd-api\\nLambda"]
+  S --> G["Census\\ngeocoder"]
+  S -->|Converse API| B["AWS Bedrock\\nClaude"]
+  S --> D[("cd_customers\\nPostgres")]
+
+  style W fill:#eef3fa,stroke:#27619c
+  style S fill:#cfe0f2,stroke:#0a2246
+  style C fill:#eef3fa,stroke:#27619c
+  style A fill:#eef3fa,stroke:#27619c
+  style G fill:#ffffff,stroke:#8ba0bd
+  style B fill:#eef3fa,stroke:#27619c
+  style D fill:#cfe0f2,stroke:#0a2246
+`} />
+
+## `cd-webapp`
+
+- **React 19 + TypeScript**, built with Vite, styled with Tailwind CSS v4, tested with Vitest and React
+  Testing Library. It's hosted on AWS Amplify, which deploys every push to `main`. Every pull request
+  runs tests, a production build, and lint first.
+- **Sign-in** uses Cognito's managed login with the **authorization code + PKCE** flow, so no client
+  secret ever ships to the browser. Requests to `cd-server` carry the resulting ID token as a bearer
+  token.
+- **"Use my location"** resolves the browser's coordinates to a congressional district through
+  `cd-server`, since the Census geocoder sends no CORS headers and can't be called from the browser
+  directly.
+
+## `cd-server`
+
+A FastAPI app serving a [Strawberry](https://strawberry.rocks) GraphQL schema at `server.civicdog.com`.
+It has its own Postgres database, `cd_customers`, which nothing else touches.
+
+### Thin resolvers, real services
+
+Each resolver delegates to a service in `services/`, using a deliberate naming split:
+
+- A **client** wraps one external system and is named after what it's a client *of*.
+- A **service** is what a resolver depends on. It may use several clients, owns the real logic, and is
+  named after the capability it provides.
+
+`CdApiService`, for example, picks between two interchangeable clients behind one interface. Locally it
+uses plain HTTP. In production it invokes `cd-api`'s Lambda **directly with boto3**, skipping API Gateway
+entirely: authorization is an IAM `lambda:InvokeFunction` grant, so no network path or API key is needed
+between the two. `boto3` has no async API, so that call runs in `asyncio.to_thread()`. Every resolver is
+`async`, so a query asking for several fields fans out its `cd-api` calls concurrently instead of one
+after another. `cd-api`'s JSON:API responses are validated against shared `cd-lib` models before a
+resolver ever sees them.
+
+### The schema
+
+| Field | What it does |
+|---|---|
+| `getDistrict(address)` / `getDistrictByCoords(lat, lng)` | Address or coordinates → state + district, via the Census geocoder |
+| `getSenators` / `getRepresentatives` | Who represents a state or district |
+| `getMember(bioguideId)` | One member, for a deep-linkable detail page, including members who've left office |
+| `discoverBills(q)` | [Semantic search](/semantic-search/) over bills by topic |
+| `searchBills(bioguideId, q)` | The same search, joined with how that member voted on each bill |
+| `getStates` | States and territories, with seat counts and voting status |
+| `summarizeVotingRecord` (mutation) | An AI summary of a member's votes on a topic. Requires sign-in |
+| `myAiSummaries` / `features` | A user's past summaries, and what they can still do today. Requires sign-in |
+
+`searchBills` is a composition of two `cd-api` endpoints: topic search, then a member's votes on exactly
+those bills. A matched bill the member never voted on comes back with `votes: []`, a first-class
+"no vote on record" state rather than a silently dropped row.
+
+### Authentication that degrades on purpose
+
+Every GraphQL request passes through a context hook that inspects the `Authorization` header:
+
+- **No token:** the request goes through anonymously. Lookup and search don't need an account.
+- **A valid token:** verified against the Cognito user pool's published signing keys (JWKS), with the
+  issuer, audience, and token type all checked. The user is then upserted into `cd_customers`.
+- **An invalid token:** the whole request gets an HTTP **401** before any resolver runs. A bad signature,
+  wrong audience, or wrong token type is never quietly treated as anonymous.
+- **cd-server's own problems** (a database hiccup during the upsert, or a failure fetching Cognito's
+  keys) degrade to anonymous instead. A caller's request shouldn't fail because of infrastructure
+  unrelated to whether their token is valid.
+
+Locally, auth verification is simply off when Cognito isn't configured, so the backend runs with zero AWS
+setup. In any other environment, missing configuration fails at startup instead.
+
+## AI voting-record summaries
+
+`summarizeVotingRecord(bioguideId, q)` produces a short, nonpartisan summary of how a member voted on the
+bills matching a topic. It's the first feature that costs real money per call, so it got the most care.
+
+### How a summary is generated
+
+1. The member's name and the matching bills plus their votes (exactly what `searchBills` returns) are
+   fetched **concurrently**.
+2. That bill data goes to an Anthropic Claude model through **Bedrock's Converse API**, with a fixed
+   system prompt.
+3. A truncated or empty completion is **rejected**, not stored as if it were finished.
+4. The result is stored and returned.
+
+### Prompt-injection guardrails
+
+- **The member's name always comes from the server**, never from the client.
+- **The user's topic is capped at 200 characters.** It sits in a natural-language wrapper outside the
+  JSON bill data, which is the only part the system prompt treats as trusted.
+
+### Built to evolve
+
+The `ai_summaries` table is general-purpose: a `kind` column plus a self-describing JSONB `subject`, so a
+future summary type needs no schema change. Each row also records the **exact system prompt** and
+**model ID** that produced it, so a later prompt change can be compared against output quality. The
+stored bill data is complete enough for a history view to re-render the original results, even after
+the underlying search would return something different.
+
+### Daily caps
+
+Every call is real Bedrock spend, so two limits apply, both counted per UTC day:
+
+- a **per-user free-tier allowance** (10 by default)
+- a **global cost ceiling** (100 by default), which takes precedence
+
+A `features` query tells the web app whether "Summarize with AI" is available and why not: personal limit
+reached or globally unavailable, plus usage so far and when it resets. The mutation **enforces the same
+check server-side** before any cd-api or Bedrock work, so the query is only a UI hint, not the control.
+
+Checking the count, generating, and inserting isn't one atomic step, so a burst of concurrent requests
+can overshoot a cap by a handful. That's an accepted trade-off: this is a cost guardrail, not a security
+boundary. A failed generation stores nothing, so it doesn't count against anyone.
+
+## Running and deploying
+
+`cd-server` is containerized, like `cd-etl`. `make start-server` runs it in Docker Compose with its own
+migrations applied, and GraphiQL comes up at `localhost:8000/graphql`. In production it runs on ECS
+behind an ALB with **zero-downtime rolling deploys**. See
+[CI/CD & Automation](/cicd/) for how splitting migrations into their own task made that possible.

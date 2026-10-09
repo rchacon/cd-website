@@ -57,6 +57,8 @@ CivicDog is split across five repositories, each with a single responsibility:
 - **[Semantic Search](/semantic-search/)** — natural-language search over legislation: tiered
   exact-match / similarity-fallback retrieval and the embedding pipeline behind it.
 - **[API](/api/)** — `cd-api`'s design: quick facts, a live OpenAPI reference, and its Lambda deployment.
+- **[Web App & Backend](/app-backend/)** — `cd-webapp` and its GraphQL backend `cd-server`: Cognito auth,
+  composed queries, and AI voting-record summaries with daily caps.
 - **[Infrastructure](/infrastructure/)** — the Terraform-managed AWS stack, security posture, and cost trade-offs.
 - **[CI/CD & Automation](/cicd/)** — keyless deploys, container automation, and IaC scanning.
 - **[WordPress Plugin](/wordpress-plugin/)** — how `cd-lookup` caches, sanitizes, and tests itself.

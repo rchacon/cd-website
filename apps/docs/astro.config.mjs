@@ -32,6 +32,7 @@ export default defineConfig({
         { label: 'Data Pipeline', link: '/data-pipeline/' },
         { label: 'Semantic Search', link: '/semantic-search/' },
         { label: 'API', link: '/api/' },
+        { label: 'Web App & Backend', link: '/app-backend/' },
         { label: 'Infrastructure', link: '/infrastructure/' },
         { label: 'CI/CD & Automation', link: '/cicd/' },
         { label: 'WordPress Plugin', link: '/wordpress-plugin/' }
