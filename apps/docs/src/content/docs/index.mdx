@@ -56,6 +56,8 @@ CivicDog is split across five repositories, each with a single responsibility:
 - **[Data Pipeline](/data-pipeline/)** — the Airflow DAGs that keep members, bills, and votes in sync.
 - **[Semantic Search](/semantic-search/)** — natural-language search over legislation: tiered
   exact-match / similarity-fallback retrieval and the embedding pipeline behind it.
+- **[Research Agent](/research-agent/)** — a LangGraph agent that answers multi-step questions with
+  checked citations, graded by its own eval suite, with its tools also served over MCP.
 - **[API](/api/)** — `cd-api`'s design: quick facts, a live OpenAPI reference, and its Lambda deployment.
 - **[Web App & Backend](/app-backend/)** — `cd-webapp` and its GraphQL backend `cd-server`: Cognito auth,
   composed queries, and AI voting-record summaries with daily caps.
