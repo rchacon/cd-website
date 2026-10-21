@@ -1,0 +1,182 @@
+---
+title: Research Agent
+description: A tool-using LangGraph agent that answers multi-step questions about Congress, cites the member and bill behind every claim, checks those citations, and is graded by its own eval suite.
+---
+
+import MermaidDiagram from '../../components/MermaidDiagram.astro';
+
+[Semantic search](/semantic-search/) answers one question at a time: *which bills are about this topic?*
+Most real questions take several steps. *"How have my senators voted on gun legislation?"* means working
+out who the senators are, finding the relevant bills, then looking up each senator's votes on them.
+*"Compare Pelosi and Jeffries on immigration"* means doing that twice and lining the results up.
+
+The research agent handles those questions. A Claude model on Bedrock decides which lookups to make,
+makes them through a small set of tools over CivicDog's own data, and writes an answer in which every
+fact cites the member or bill it came from. Those citations are then checked against what the tools
+actually returned. It runs in `cd-server` and is exposed over GraphQL as a multi-turn conversation.
+
+## Design goals
+
+- **Grounded, not remembered.** The model is told never to answer from memory. Everything it states
+  comes from a tool result in the current conversation, and is cited by id: `[S000033]` for a member,
+  `[119-hr-2616]` for a bill.
+- **Checkable.** A citation is a link a reader can follow, and a claim the system can verify.
+- **Bounded.** Every turn has a step budget, inputs have size limits, and usage is capped per day.
+- **Measured.** A suite of golden questions grades the agent, so a prompt or model change shows up as a
+  score rather than a hunch.
+
+## The loop
+
+The agent is a hand-built [LangGraph](https://langchain-ai.github.io/langgraph/) `StateGraph` with four
+nodes:
+
+<MermaidDiagram code={`graph LR
+  Q["Question"] --> A["agent\\nClaude on Bedrock"]
+  A -->|"tool calls"| T["tools\\nrun in parallel"]
+  T --> A
+  A -->|"final answer"| C["check_citations"]
+  C -->|"unknown id,\\nfirst time"| A
+  C --> D["Answer\\n+ trace"]
+  A -->|"budget spent"| S["step_limit"]
+  S --> D
+
+  style Q fill:#ffffff,stroke:#8ba0bd
+  style A fill:#eef3fa,stroke:#27619c
+  style T fill:#eef3fa,stroke:#27619c
+  style C fill:#eef3fa,stroke:#27619c
+  style S fill:#ffffff,stroke:#8ba0bd
+  style D fill:#cfe0f2,stroke:#0a2246
+`} />
+
+- **`agent`** calls the model (`ChatBedrockConverse` from `langchain-aws`) with the tools bound. It
+  either asks for tool calls or writes a final answer.
+- **`tools`** runs every tool call from one model response **concurrently**. Comparing two members asks
+  for both voting records at once, so the turn waits for the slower lookup, not both added together. A
+  tool that raises becomes an error result the model can see and work around, rather than a failed turn.
+- **`check_citations`** compares the ids cited in the answer with every id the tools returned in this
+  conversation. An id that wasn't returned sends the model back once, with a message naming it. If the
+  retry still cites an unknown id, the answer is kept but marked `citations_flagged`, so the UI can warn
+  and the evals can count it.
+- **`step_limit`** ends a turn that has used its budget of 8 model calls with a plain message, rather than
+  an error. Comparing two members takes about five.
+
+### Why build the graph by hand
+
+A plain `while response.tool_calls:` loop would be about 50 lines, and LangGraph's prebuilt
+`create_react_agent` is a one-liner. Neither has a place for a verification step that can **send the
+model back** to fix its answer. Writing the graph keeps each routing rule explicit and testable: for
+example, a citation retry is only allowed while steps remain in the budget. Each node is tested on its own
+against a scripted fake chat model, with no Bedrock calls.
+
+## Tools
+
+Tool design is most of the work in an agent: the model chooses from names, descriptions and parameter
+schemas alone. Each tool's description is written for the model, and says what the tool returns, when to
+use it, and what its results don't cover.
+
+| Tool | What it does | Backed by |
+|---|---|---|
+| `find_members` | Members by name, from any state, or a state's whole delegation | `GET /members?filter[name]=…` |
+| `get_member` | One member by bioguide id, including members who've left office | `GET /members/{id}` |
+| `search_bills` | Bills by topic, saying whether each matched an exact subject tag or only by similarity | [Semantic search](/semantic-search/) |
+| `get_member_votes` | One member's roll-call votes on specific bills, procedural motions labeled as such | `GET /members/{id}/votes` |
+
+The tools are plain async Python methods with no LangChain imports. The agent wraps them as LangChain
+tools, and the same methods are also served as an **MCP server** (below). Every result carries the ids
+that answers cite. A failed lookup, such as an unknown id, returns an error the model can read instead of
+raising, so it can try another approach.
+
+## Conversations and storage
+
+Each turn of a conversation is stored in `cd-server`'s own Postgres database, in two tables managed by
+the same Alembic migrations as everything else:
+
+- `agent_conversations`: who asked, a title, and timestamps.
+- `agent_turns`: each question and answer. An answer is stored with its **trace**: every model call and
+  tool call, with inputs, outputs, latency and tokens, plus the model id and how the turn ended
+  (`answered`, `citations_flagged` or `step_limit`).
+
+A follow-up question replays earlier questions and answers as plain messages, not their tool results,
+which would multiply input tokens. The ids those earlier lookups returned are carried forward, so
+*"which party is he in?"* can still cite the member found two turns ago.
+
+LangGraph has its own Postgres checkpointer for this. It isn't used, for three reasons: it needs a second
+Postgres driver (psycopg 3, alongside `cd-server`'s asyncpg), it creates its own tables outside Alembic,
+and it stores opaque graph state. A history view needs a readable question, answer and trace.
+
+## Guardrails
+
+- **Scope.** The system prompt limits the agent to Congress, its members, bills and votes, and has it
+  decline anything else, including requests to reveal its instructions.
+- **Neutrality.** It describes what members did, not why: no guessing at motives and no labels such as
+  *anti-X*. A procedural vote, like a motion to recommit, is not reported as a vote on the bill.
+- **Honesty about the data.** It says so when the data can't answer: when a question needs Senate votes,
+  or a bill's full text.
+- **Input limits.** Questions are capped at 1,000 characters, only the last 20 turns are replayed, and
+  bill summaries in tool results are shortened.
+- **Daily caps.** Every turn is real Bedrock spend, so the same cap system as
+  [AI voting-record summaries](/app-backend/#daily-caps) applies: 20 answers per user and 200 in total
+  per UTC day, checked server-side before any model call.
+
+## The API
+
+Conversations require sign-in, and are exposed in `cd-server`'s GraphQL schema:
+
+| Field | What it does |
+|---|---|
+| `startAgentConversation(question)` (mutation) | Starts a conversation and answers its first question |
+| `continueAgentConversation(conversationId, question)` (mutation) | Asks a follow-up |
+| `myAgentConversations(limit)` | The signed-in user's conversations, newest first |
+| `agentConversation(id)` | One conversation, with every turn and its trace |
+
+## Evals
+
+Golden questions are what make an agent something you can change with confidence. The suite in
+`cd-server/evals/` has 24 cases across seven categories:
+
+| Category | Example |
+|---|---|
+| lookup | *Who are the senators from Vermont?*, an ambiguous or made-up name |
+| votes | *Compare how Nancy Pelosi and Jim Jordan voted on energy bills.* |
+| bills | *What bills about veterans has the House voted on?* |
+| multi-turn | *Who represents California's 11th district?*, then a follow-up about "she" |
+| limits | *How did Senator Sanders vote on the Laken Riley Act?* (no Senate votes yet) |
+| scope | *Who is going to win the 2026 midterm elections?*, a prompt injection |
+| neutrality | *Is Nancy Pelosi a good person?* |
+
+Each case is graded two ways:
+
+1. **Deterministic checks** from the trace: did the turn finish, did it call the tools it needed, did it
+   avoid the ones it shouldn't, and did it cite the members and bills it must. Members are pinned by
+   bioguide id, so these checks don't depend on the model's wording.
+2. **An LLM judge** that sees the question, the tool results and the answer. It returns structured
+   output: whether every claim is supported by the tool results, which claims aren't, and a pass or fail
+   for each case's expected behaviors.
+
+`make eval-agent` runs the suite against real Bedrock and real data, and writes a scorecard: pass rate by
+category, tokens, latency, how often citations were flagged or the step limit was hit, and the full
+answer for every failure. It runs by hand rather than in CI, since every run costs real model calls.
+
+## MCP server
+
+The same four tools are also served over the [Model Context Protocol](https://modelcontextprotocol.io),
+so Claude Desktop, Claude Code, or any other MCP client can look up members, bills and votes in
+CivicDog's data directly, using its own model.
+
+```bash
+make mcp-server                         # stdio transport
+claude mcp add cd-platform -- make -s -C /path/to/cd-platform mcp-server
+```
+
+Every tool is marked read-only. The server runs `cd-api` in-process, so it needs only database access,
+not a running `cd-server`. Writing the tools once and serving them to two different kinds of client is
+the point: the tool layer doesn't depend on LangChain, or on this agent.
+
+## What's next
+
+- **Senate votes.** A Senate roll-call pipeline is in progress. Once it lands, `get_member_votes` covers
+  both chambers, and the limits evals flip from "says it can't" to "answers".
+- **Bill text.** Planned passage-level search over full bill text adds a `search_bill_text` tool. The agent
+  can then quote and cite the specific section behind a claim, not just the bill.
+- **Bills by name.** Storing bills' short and popular titles, so a bill can be found by the name people
+  actually use for it.

@@ -31,6 +31,7 @@ export default defineConfig({
         { label: 'Architecture', link: '/architecture/' },
         { label: 'Data Pipeline', link: '/data-pipeline/' },
         { label: 'Semantic Search', link: '/semantic-search/' },
+        { label: 'Research Agent', link: '/research-agent/' },
         { label: 'API', link: '/api/' },
         { label: 'Web App & Backend', link: '/app-backend/' },
         { label: 'Infrastructure', link: '/infrastructure/' },
