@@ -19,6 +19,10 @@ It's built from two halves:
   controlled subject vocabulary, embedded and up to date — incrementally, without re-paying for work
   that hasn't changed.
 
+The same retrieval is also the "R" in CivicDog's
+[RAG voting-record summaries](/app-backend/#ai-voting-record-summaries-rag): the bills it returns,
+joined with a member's votes, are the only material the model summarizes from.
+
 ## Why tiered retrieval
 
 The obvious way to build this is pure vector search: embed every bill, embed the query, return the
