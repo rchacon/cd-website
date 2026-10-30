@@ -1,6 +1,6 @@
 ---
 title: Data Pipeline
-description: How cd-etl's Airflow DAGs keep congressional members, bills, votes, and embeddings in sync with Congress.gov.
+description: How cd-etl's Airflow DAGs keep congressional members, bills, votes, and embeddings in sync with Congress.gov, and how they validate what comes in.
 ---
 
 `cd-etl` is an Apache Airflow project (TaskFlow API) with three DAGs, all syncing from the official
@@ -78,6 +78,86 @@ subjects get added, and a new CRS summary is published at each legislative stage
 The two DAGs aren't chained together. The votes DAG never waits for a refresh, since it syncs any bill it
 hasn't seen itself; a known bill's subjects being a few days stale only affects readers, not whether
 votes get recorded correctly.
+
+## Data validation at ingestion
+
+Upstream data is treated as untrusted. Congress.gov is the official source, but its responses still
+have missing fields, quirks between endpoints, and the occasional degraded reply. Validation happens in
+four layers, each catching what the one before it can't.
+
+### 1. Schema validation at the API boundary
+
+Every Congress.gov response is parsed into a **Pydantic model** the moment it arrives
+(`cd/etl/models/congress_gov.py`, one model per endpoint shape), and senate.gov's roll-call XML, read by the
+upcoming Senate votes DAG, gets its own models (`models/senate_gov.py`). A missing or wrongly typed field raises one clear
+`ValidationError` naming the field, right at the call site, instead of an obscure `KeyError` several
+functions later in a transform. Models map Congress.gov's camelCase onto snake_case fields
+automatically, so the wire format never leaks into the pipeline's code.
+
+### 2. Normalization while parsing
+
+Some upstream quirks are fixed inside the model, so every caller gets the corrected value:
+
+- **At-large districts.** Congress.gov's member-detail endpoint omits `district` entirely for at-large
+  House seats, while its list endpoint returns `0`. The `Term` model treats a missing House district as
+  `0` (at-large), and always clears the district on Senate terms, whatever the source sends.
+- **Party history order.** `partyHistory` is sorted by start year before it's stored or hashed, since
+  the API doesn't guarantee its order.
+- **Congress end dates** are derived from the first session's start date, not taken from the API's
+  off-by-one `endYear` (see [Hash-guarded upserts](#hash-guarded-upserts)).
+
+### 3. Record-level checks: skip and count, don't fail the run
+
+One malformed record shouldn't block every good one, so each DAG validates **per record**, logs what it
+drops, and keeps going:
+
+- **Malformed members and votes** (a `KeyError`, `TypeError` or `ValidationError` while transforming
+  one) are logged and skipped individually.
+- **House votes are skipped, and counted by reason**, when they can't be stored correctly:
+  - the vote's detail couldn't be fetched (`missing_detail`)
+  - its member-by-member breakdown couldn't be fetched (`missing_member_votes`)
+  - none of its votes cast survived validation (`zero_valid_casts`)
+
+  A roll call is never stored without real votes. An empty one would look "already synced" forever,
+  with no way to backfill it later.
+- **Votes by unknown members are dropped, not inserted.** `roll_call_member_votes` has a foreign key to
+  `members`, and a single unknown `bioguide_id` would otherwise fail the whole batch insert. These are
+  counted too (`dropped_unknown_bioguide`).
+- **Purely procedural votes** with no bill or amendment attached (e.g. "Elected Speaker") are filtered
+  out before anything is fetched.
+- **A broken secondary source degrades, it doesn't fail.** If the congress-legislators crosswalk is
+  unreachable or malformed, that day's run makes no crosswalk update. If a bill's `/summaries` call
+  fails, that sync stores no new CRS summary. Only the data a row can't exist without (a bill's details
+  and subjects) is allowed to fail its sync.
+
+### 4. Never overwrite good data with a bad response
+
+`bills_etl` re-syncs the same bills over and over, so a single degraded response must not erase data
+that was correct yesterday:
+
+- **Bill upserts use `COALESCE`** against the stored row. A missing title, policy area or CRS summary in
+  today's response keeps the stored value instead of nulling it out.
+- **An empty subjects list doesn't wipe a bill's subjects.** A bill losing every subject at once is far
+  more likely to be a bad response than a real change, so the subject replace is skipped entirely when
+  the fetched list is empty.
+- **The CRS summary chosen is the latest one with actual text.** Summaries with null or empty text are
+  ignored, rather than picking the newest entry and storing nothing.
+
+### Backstop: constraints in Postgres
+
+Anything that gets past the pipeline's own checks still has to satisfy the schema (Alembic migrations in
+`cd-etl/migrations/`): typed columns, `NOT NULL`s, unique keys, and foreign keys tying
+`roll_call_member_votes` to `roll_calls` and `members`, and `roll_calls` to `bills`. That last key is on
+`(bill_id, congress)`, so a roll call can't point at a bill from a different Congress. `CHECK` constraints
+encode domain rules too:
+
+- `congress > 0`, `bill_number > 0`, and `session IN (1, 2)`
+- a Congress's `end_date` falls after its `start_date`, and a term's `end_year` is no earlier than its
+  `start_year`
+- a member's `death_year` is no earlier than their `birth_year`
+- a House term has a district of `0` or more, and a Senate term has none
+
+So a bug in a transform fails loudly at write time instead of quietly storing an impossible row.
 
 ## Hash-guarded upserts
 
