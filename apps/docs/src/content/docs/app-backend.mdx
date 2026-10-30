@@ -1,6 +1,6 @@
 ---
 title: Web App & Backend
-description: How cd-webapp and cd-server work together — a GraphQL backend composing cd-api, Census geocoding, Cognito auth, and Bedrock-powered AI voting-record summaries with daily caps.
+description: How cd-webapp and cd-server work together — a GraphQL backend composing cd-api, Census geocoding, Cognito auth, and retrieval-augmented (RAG) AI voting-record summaries on Bedrock, with daily caps.
 ---
 
 import MermaidDiagram from '../../components/MermaidDiagram.astro';
@@ -96,19 +96,53 @@ Every GraphQL request passes through a context hook that inspects the `Authoriza
 Locally, auth verification is simply off when Cognito isn't configured, so the backend runs with zero AWS
 setup. In any other environment, missing configuration fails at startup instead.
 
-## AI voting-record summaries
+## AI voting-record summaries (RAG)
 
 `summarizeVotingRecord(bioguideId, q)` produces a short, nonpartisan summary of how a member voted on the
 bills matching a topic. It's the first feature that costs real money per call, so it got the most care.
 
+It's **retrieval-augmented generation (RAG)**. The model never answers from what it already knows about a
+member or a bill. Every summary is generated from records CivicDog retrieved for that request, so each
+claim traces back to a real bill and a real recorded vote.
+
+<MermaidDiagram code={`graph LR
+  Q["Topic\n'drug prices'"] --> R["Retrieve\nsemantic search\n+ member's votes"]
+  R --> A["Augment\nbills + votes as JSON\nin the prompt"]
+  A --> G["Generate\nClaude on Bedrock"]
+  G --> S["Summary\nstored with prompt\n+ model ID"]
+
+  style Q fill:#ffffff,stroke:#8ba0bd
+  style R fill:#eef3fa,stroke:#27619c
+  style A fill:#eef3fa,stroke:#27619c
+  style G fill:#eef3fa,stroke:#27619c
+  style S fill:#ffffff,stroke:#8ba0bd
+`} />
+
 ### How a summary is generated
 
-1. The member's name and the matching bills plus their votes (exactly what `searchBills` returns) are
-   fetched **concurrently**.
-2. That bill data goes to an Anthropic Claude model through **Bedrock's Converse API**, with a fixed
-   system prompt.
-3. A truncated or empty completion is **rejected**, not stored as if it were finished.
-4. The result is stored and returned.
+1. **Retrieve.** The topic runs through the same [semantic search](/semantic-search/) as `searchBills`:
+   an exact policy-area or subject match first, then Titan embedding similarity over bill summaries in
+   pgvector. The matching bills are joined with this member's recorded votes on them, and the member's
+   name is fetched **concurrently**.
+2. **Augment.** The retrieved bills and votes go into the prompt as structured JSON. They carry each
+   bill's match tier, so the model knows a similarity match is lower confidence than an exact tag match.
+3. **Generate.** An Anthropic Claude model writes the summary through **Bedrock's Converse API**, with a
+   fixed system prompt that limits it to **only the provided data**: no outside knowledge, and nothing
+   the data doesn't support.
+4. A truncated or empty completion is **rejected**, not stored as if it were finished.
+5. The result is stored and returned.
+
+### Grounding rules
+
+The system prompt turns the retrieved data's structure into rules the model must follow, aimed at the
+ways a voting-record summary typically goes wrong:
+
+- **A bill with no recorded vote is stated explicitly.** It is never dropped, and a vote is never
+  invented for it.
+- **Procedural votes are labelled as procedural.** For example, a motion to recommit is never reported
+  as a vote on the bill itself.
+- **Similarity matches are flagged as lower confidence**, so a tangentially related bill isn't presented
+  as squarely on-topic.
 
 ### Prompt-injection guardrails
 
